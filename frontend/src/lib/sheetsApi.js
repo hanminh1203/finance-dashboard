@@ -1,9 +1,17 @@
 const SHEET_ID = import.meta.env.VITE_SHEET_ID;
-const TRANSACTION_SHEET = import.meta.env.VITE_TRANSACTION_SHEET || 'Transaction';
-const METADATA_SHEET = import.meta.env.VITE_METADATA_SHEET || 'Metadata';
+const TRANSACTIONS_TABLE = import.meta.env.VITE_TRANSACTIONS_TABLE || 'Transactions';
+const CATEGORY_TABLE = import.meta.env.VITE_CATEGORY_TABLE || 'Category';
+const SOURCES_TABLE = import.meta.env.VITE_SOURCES_TABLE || 'Sources';
 const BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
-let sheetIdCache = null; // numeric gid, cached per session
+// Raw input columns written by addTransaction/addTransfer, matched by header
+// name within whichever table is configured as TRANSACTIONS_TABLE. Any other
+// columns in that table (Main Category, Type, Month, Balance, ...) are left
+// alone — as a real Sheets "Table", it auto-extends its own formula columns
+// when a new row is added, so we never touch them.
+const INPUT_COLUMNS = ['Date', 'Change', 'Source', 'Comment', 'Sub category'];
+
+let tablesCache = null; // { [tableName]: TableInfo }, cached for the session
 
 async function request(token, path, opts = {}) {
   const res = await fetch(`${BASE}/${SHEET_ID}${path}`, {
@@ -24,145 +32,184 @@ async function request(token, path, opts = {}) {
   return res.json();
 }
 
-function encodeRange(range) {
-  return encodeURIComponent(range);
+function columnLetter(index) {
+  // 0-based column index -> A1 column letters (0 -> A, 25 -> Z, 26 -> AA, ...)
+  let n = index + 1;
+  let s = '';
+  while (n > 0) {
+    const rem = (n - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
 }
 
-/** Fetch all values from a sheet tab (A:Z is enough for our wide tables). */
-async function getValues(token, sheetName) {
-  const data = await request(token, `/values/${encodeRange(`${sheetName}!A1:Z`)}`);
+/**
+ * Loads Table metadata (name, sheet, range, column names) for every table in
+ * the spreadsheet in a single lightweight request — this is metadata only,
+ * no cell values, so it's cheap regardless of how much data the sheet holds.
+ */
+async function getTables(token) {
+  if (tablesCache) return tablesCache;
+  const data = await request(
+    token,
+    '?fields=sheets(properties(sheetId,title),tables(name,range,columnProperties))'
+  );
+  const byName = {};
+  for (const sheet of data.sheets || []) {
+    for (const table of sheet.tables || []) {
+      byName[table.name] = {
+        sheetId: sheet.properties.sheetId,
+        sheetTitle: sheet.properties.title,
+        range: table.range, // GridRange: 0-indexed, endRow/endColumn exclusive
+        columns: (table.columnProperties || [])
+          .map((c, i) => ({ index: c.columnIndex ?? i, name: c.columnName }))
+          .sort((a, b) => a.index - b.index),
+      };
+    }
+  }
+  tablesCache = byName;
+  return byName;
+}
+
+async function getTable(token, tableName) {
+  const tables = await getTables(token);
+  const t = tables[tableName];
+  if (!t) throw new Error(`Table "${tableName}" not found. Did you run Convert to Table on it?`);
+  return t;
+}
+
+/** A1 range for the whole table including its header row. */
+function fullRangeA1(t) {
+  const startCol = columnLetter(t.range.startColumnIndex);
+  const endCol = columnLetter(t.range.endColumnIndex - 1);
+  const startRow = t.range.startRowIndex + 1;
+  const endRow = t.range.endRowIndex; // exclusive already -> inclusive last row
+  return `${t.sheetTitle}!${startCol}${startRow}:${endCol}${endRow}`;
+}
+
+/** A1 range for just the table's data rows (header excluded). */
+function dataRangeA1(t) {
+  const startCol = columnLetter(t.range.startColumnIndex);
+  const endCol = columnLetter(t.range.endColumnIndex - 1);
+  const startRow = t.range.startRowIndex + 2; // skip header row
+  const endRow = t.range.endRowIndex;
+  return `${t.sheetTitle}!${startCol}${startRow}:${endCol}${endRow}`;
+}
+
+async function getValues(token, a1Range) {
+  const data = await request(token, `/values/${encodeURIComponent(a1Range)}`);
   return data.values || [];
 }
 
+async function batchGetValues(token, a1Ranges) {
+  const qs = a1Ranges.map((r) => `ranges=${encodeURIComponent(r)}`).join('&');
+  const data = await request(token, `/values:batchGet?${qs}`);
+  return data.valueRanges.map((vr) => vr.values || []);
+}
+
+/**
+ * Reads only the Transactions table's own range — not the whole sheet.
+ */
 export async function getTransactionData(token) {
-  const values = await getValues(token, TRANSACTION_SHEET);
-  if (values.length < 2) return { headers: [], rows: [] };
-  const headers = values[0].map((h) => String(h).trim());
+  const table = await getTable(token, TRANSACTIONS_TABLE);
+  const values = await getValues(token, dataRangeA1(table));
+  const headers = table.columns.map((c) => c.name);
+  const headerStartRow = table.range.startRowIndex + 2; // first data row, 1-indexed
+
   const rows = [];
-  for (let i = 1; i < values.length; i++) {
-    const row = values[i];
-    if (!row || row.every((c) => c === '' || c == null)) continue;
+  values.forEach((row, i) => {
+    if (!row || row.every((c) => c === '' || c == null)) return;
     const obj = {};
     headers.forEach((h, idx) => { obj[h] = row[idx]; });
-    obj.__row = i + 1;
+    obj.__row = headerStartRow + i;
     rows.push(obj);
-  }
+  });
   return { headers, rows };
 }
 
 /**
- * Parses the Metadata sheet's stacked mini-tables by header name:
- *   "Name" / "Type"                          -> sources
- *   "Main Category" / "Sub category" / "Type" -> categories
+ * Reads the Category and Sources tables in a single batched request, using
+ * each table's own defined range (still no full-sheet reads).
  */
 export async function getMetadata(token) {
-  const values = await getValues(token, METADATA_SHEET);
-  const sources = [];
-  const categories = [];
-  const seenSources = new Set();
-  const seenCategories = new Set();
+  const [categoryTable, sourcesTable] = await Promise.all([
+    getTable(token, CATEGORY_TABLE),
+    getTable(token, SOURCES_TABLE),
+  ]);
 
-  for (let i = 0; i < values.length; i++) {
-    const row = (values[i] || []).map((c) => String(c ?? '').trim());
+  const [categoryValues, sourcesValues] = await batchGetValues(token, [
+    dataRangeA1(categoryTable),
+    dataRangeA1(sourcesTable),
+  ]);
 
-    if (row[0] === 'Name' && row[1] === 'Type') {
-      for (let j = i + 1; j < values.length; j++) {
-        const r = values[j] || [];
-        const name = String(r[0] ?? '').trim();
-        if (!name) break;
-        if (name === 'Main Category') break;
-        const type = String(r[1] ?? '').trim();
-        if (!seenSources.has(name)) {
-          seenSources.add(name);
-          sources.push({ name, type });
-        }
-      }
-    }
+  const catHeaders = categoryTable.columns.map((c) => c.name);
+  const catIdx = {
+    main: catHeaders.findIndex((h) => /^main category$/i.test(h)),
+    sub: catHeaders.findIndex((h) => /^sub ?category$/i.test(h)),
+    type: catHeaders.findIndex((h) => /^type$/i.test(h)),
+  };
+  const categories = categoryValues
+    .filter((r) => r[catIdx.main] && r[catIdx.sub])
+    .map((r) => ({
+      mainCategory: String(r[catIdx.main]).trim(),
+      subCategory: String(r[catIdx.sub]).trim(),
+      type: catIdx.type >= 0 ? String(r[catIdx.type] || '').trim() : '',
+    }));
 
-    if (row[0] === 'Main Category' && (row[1] === 'Sub category' || row[1] === 'Sub Category')) {
-      for (let j = i + 1; j < values.length; j++) {
-        const r = values[j] || [];
-        const main = String(r[0] ?? '').trim();
-        const sub = String(r[1] ?? '').trim();
-        if (!main && !sub) break;
-        if (!main || !sub) continue;
-        const type = String(r[2] ?? '').trim();
-        const key = `${main}|${sub}`;
-        if (!seenCategories.has(key)) {
-          seenCategories.add(key);
-          categories.push({ mainCategory: main, subCategory: sub, type });
-        }
-      }
-    }
-  }
+  const srcHeaders = sourcesTable.columns.map((c) => c.name);
+  const srcIdx = {
+    name: srcHeaders.findIndex((h) => /^name$/i.test(h)),
+    type: srcHeaders.findIndex((h) => /^type$/i.test(h)),
+  };
+  const sources = sourcesValues
+    .filter((r) => r[srcIdx.name])
+    .map((r) => ({
+      name: String(r[srcIdx.name]).trim(),
+      type: srcIdx.type >= 0 ? String(r[srcIdx.type] || '').trim() : '',
+    }));
 
   return { sources, categories };
 }
 
-async function getTransactionSheetGid(token) {
-  if (sheetIdCache != null) return sheetIdCache;
-  const data = await request(token, '?fields=sheets.properties');
-  const sheet = data.sheets.find((s) => s.properties.title === TRANSACTION_SHEET);
-  if (!sheet) throw new Error(`Sheet tab "${TRANSACTION_SHEET}" not found`);
-  sheetIdCache = sheet.properties.sheetId;
-  return sheetIdCache;
-}
-
 /**
- * Appends one row of raw data (columns A–E) to the Transaction sheet, then
- * copies the formulas from the row above (columns F onward — Main Category,
- * Type, Month, Balance) into the new row so those computed columns keep
- * working, exactly as if you'd dragged the formula down by hand.
+ * Appends one row of raw input data to the Transactions table, scoped to
+ * only the input columns (Date..Sub category) — other columns in the row
+ * (Main Category, Type, Month, Balance, ...) are left untouched, and the
+ * Table's own auto-fill (Convert to Table's calculated-column behavior)
+ * fills them in.
  */
-async function appendRow(token, [date, change, source, comment, subCategory]) {
-  const appendRes = await request(
+async function appendRow(token, values) {
+  const table = await getTable(token, TRANSACTIONS_TABLE);
+  const colIndex = {};
+  for (const name of INPUT_COLUMNS) {
+    const col = table.columns.find((c) => c.name === name);
+    if (!col) throw new Error(`Column "${name}" not found in table "${TRANSACTIONS_TABLE}"`);
+    colIndex[name] = col.index;
+  }
+  const indices = INPUT_COLUMNS.map((n) => colIndex[n]);
+  const minCol = Math.min(...indices);
+  const maxCol = Math.max(...indices);
+  if (maxCol - minCol !== INPUT_COLUMNS.length - 1) {
+    throw new Error('Input columns must be contiguous in the Transactions table');
+  }
+
+  // Re-order the provided values to match actual column order left-to-right.
+  const ordered = INPUT_COLUMNS
+    .map((name, i) => ({ index: colIndex[name], value: values[i] }))
+    .sort((a, b) => a.index - b.index)
+    .map((x) => x.value);
+
+  const startCol = columnLetter(minCol);
+  const endCol = columnLetter(maxCol);
+  const startRow = table.range.startRowIndex + 2; // first data row
+  const appendRange = `${table.sheetTitle}!${startCol}${startRow}:${endCol}`;
+
+  await request(
     token,
-    `/values/${encodeRange(`${TRANSACTION_SHEET}!A:E`)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ values: [[date, change, source, comment, subCategory]] }),
-    }
+    `/values/${encodeURIComponent(appendRange)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method: 'POST', body: JSON.stringify({ values: [ordered] }) }
   );
-
-  const updatedRange = appendRes.updates?.updatedRange || '';
-  const match = updatedRange.match(/![A-Z]+(\d+):/);
-  const newRow = match ? parseInt(match[1], 10) : null;
-
-  if (newRow && newRow > 2) {
-    await copyFormulasDown(token, newRow);
-  }
-  return newRow;
-}
-
-/** Copies columns F: from (newRow - 1) into newRow via a Sheets batchUpdate CopyPaste request. */
-async function copyFormulasDown(token, newRow) {
-  const gid = await getTransactionSheetGid(token);
-  const source = {
-    sheetId: gid,
-    startRowIndex: newRow - 2, // 0-indexed, row above
-    endRowIndex: newRow - 1,
-    startColumnIndex: 5, // column F
-    endColumnIndex: 26,
-  };
-  const destination = {
-    sheetId: gid,
-    startRowIndex: newRow - 1,
-    endRowIndex: newRow,
-    startColumnIndex: 5,
-    endColumnIndex: 26,
-  };
-  try {
-    await request(token, ':batchUpdate', {
-      method: 'POST',
-      body: JSON.stringify({
-        requests: [{ copyPaste: { source, destination, pasteType: 'PASTE_FORMULA' } }],
-      }),
-    });
-  } catch {
-    // Non-fatal: if there are no formulas in those columns (e.g. plain values
-    // or an ARRAYFORMULA that already auto-extends), this call may no-op or
-    // fail harmlessly — the raw transaction row itself is already saved.
-  }
 }
 
 export async function addTransaction(token, { date, amount, type, source, subCategory, comment }) {

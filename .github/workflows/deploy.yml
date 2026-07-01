@@ -36,8 +36,9 @@ jobs:
         env:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_SHEET_ID: ${{ secrets.VITE_SHEET_ID }}
-          VITE_TRANSACTION_SHEET: Transaction
-          VITE_METADATA_SHEET: Metadata
+          VITE_TRANSACTIONS_TABLE: Transactions
+          VITE_CATEGORY_TABLE: Category
+          VITE_SOURCES_TABLE: Sources
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
         run: npm run build
 
