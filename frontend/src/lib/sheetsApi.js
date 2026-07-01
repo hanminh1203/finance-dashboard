@@ -1,14 +1,20 @@
+import { parseAmount } from './transform';
+
 const SHEET_ID = import.meta.env.VITE_SHEET_ID;
+
+// "Transactions" is written to ONLY (raw input rows). All reads for
+// dashboard/analytics use "Computed_Transactions" instead, which already
+// carries the calculated columns (Main Category, Type, Month, Balance, ...).
 const TRANSACTIONS_TABLE = import.meta.env.VITE_TRANSACTIONS_TABLE || 'Transactions';
+const COMPUTED_TRANSACTIONS_TABLE = import.meta.env.VITE_COMPUTED_TRANSACTIONS_TABLE || 'Computed_Transactions';
+const INCOME_EXPENSE_TABLE = import.meta.env.VITE_INCOME_EXPENSE_TABLE || 'Income vs Expense by Month';
 const CATEGORY_TABLE = import.meta.env.VITE_CATEGORY_TABLE || 'Category';
 const SOURCES_TABLE = import.meta.env.VITE_SOURCES_TABLE || 'Sources';
 const BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 // Raw input columns written by addTransaction/addTransfer, matched by header
-// name within whichever table is configured as TRANSACTIONS_TABLE. Any other
-// columns in that table (Main Category, Type, Month, Balance, ...) are left
-// alone — as a real Sheets "Table", it auto-extends its own formula columns
-// when a new row is added, so we never touch them.
+// name within the "Transactions" table. Any other columns are left alone —
+// as a real Sheets Table, calculated columns auto-extend on new rows.
 const INPUT_COLUMNS = ['Date', 'Change', 'Source', 'Comment', 'Sub category'];
 
 let tablesCache = null; // { [tableName]: TableInfo }, cached for the session
@@ -42,6 +48,11 @@ function columnLetter(index) {
     n = Math.floor((n - 1) / 26);
   }
   return s;
+}
+
+/** Quotes a sheet title for A1 notation if it contains spaces or other special chars. */
+function quoteSheetTitle(title) {
+  return /^[A-Za-z0-9_]+$/.test(title) ? title : `'${title.replace(/'/g, "''")}'`;
 }
 
 /**
@@ -79,22 +90,13 @@ async function getTable(token, tableName) {
   return t;
 }
 
-/** A1 range for the whole table including its header row. */
-function fullRangeA1(t) {
-  const startCol = columnLetter(t.range.startColumnIndex);
-  const endCol = columnLetter(t.range.endColumnIndex - 1);
-  const startRow = t.range.startRowIndex + 1;
-  const endRow = t.range.endRowIndex; // exclusive already -> inclusive last row
-  return `${t.sheetTitle}!${startCol}${startRow}:${endCol}${endRow}`;
-}
-
 /** A1 range for just the table's data rows (header excluded). */
 function dataRangeA1(t) {
   const startCol = columnLetter(t.range.startColumnIndex);
   const endCol = columnLetter(t.range.endColumnIndex - 1);
   const startRow = t.range.startRowIndex + 2; // skip header row
   const endRow = t.range.endRowIndex;
-  return `${t.sheetTitle}!${startCol}${startRow}:${endCol}${endRow}`;
+  return `${quoteSheetTitle(t.sheetTitle)}!${startCol}${startRow}:${endCol}${endRow}`;
 }
 
 async function getValues(token, a1Range) {
@@ -108,11 +110,18 @@ async function batchGetValues(token, a1Ranges) {
   return data.valueRanges.map((vr) => vr.values || []);
 }
 
+function findCol(headers, pattern) {
+  return headers.findIndex((h) => pattern.test(String(h || '').trim()));
+}
+
 /**
- * Reads only the Transactions table's own range — not the whole sheet.
+ * Reads only the Computed_Transactions table's own range — not the whole
+ * sheet, and not the raw Transactions table (which is write-only from the
+ * app's perspective). This is the source for the dashboard trend chart,
+ * per-source history, and the category breakdown chart.
  */
 export async function getTransactionData(token) {
-  const table = await getTable(token, TRANSACTIONS_TABLE);
+  const table = await getTable(token, COMPUTED_TRANSACTIONS_TABLE);
   const values = await getValues(token, dataRangeA1(table));
   const headers = table.columns.map((c) => c.name);
   const headerStartRow = table.range.startRowIndex + 2; // first data row, 1-indexed
@@ -126,6 +135,29 @@ export async function getTransactionData(token) {
     rows.push(obj);
   });
   return { headers, rows };
+}
+
+/**
+ * Reads the pre-aggregated "Income vs Expense by Month" table directly —
+ * this feeds the left dashboard chart without the app re-deriving monthly
+ * totals itself.
+ */
+export async function getIncomeExpenseByMonth(token) {
+  const table = await getTable(token, INCOME_EXPENSE_TABLE);
+  const values = await getValues(token, dataRangeA1(table));
+  const headers = table.columns.map((c) => c.name);
+  const idx = {
+    month: findCol(headers, /^month$/i),
+    income: findCol(headers, /^income$/i),
+    expense: findCol(headers, /^expense$/i),
+  };
+  return values
+    .filter((r) => r[idx.month])
+    .map((r) => ({
+      month: String(r[idx.month]).trim(),
+      income: parseAmount(r[idx.income]),
+      expense: parseAmount(r[idx.expense]),
+    }));
 }
 
 /**
@@ -145,9 +177,9 @@ export async function getMetadata(token) {
 
   const catHeaders = categoryTable.columns.map((c) => c.name);
   const catIdx = {
-    main: catHeaders.findIndex((h) => /^main category$/i.test(h)),
-    sub: catHeaders.findIndex((h) => /^sub ?category$/i.test(h)),
-    type: catHeaders.findIndex((h) => /^type$/i.test(h)),
+    main: findCol(catHeaders, /^main category$/i),
+    sub: findCol(catHeaders, /^sub ?category$/i),
+    type: findCol(catHeaders, /^type$/i),
   };
   const categories = categoryValues
     .filter((r) => r[catIdx.main] && r[catIdx.sub])
@@ -159,8 +191,8 @@ export async function getMetadata(token) {
 
   const srcHeaders = sourcesTable.columns.map((c) => c.name);
   const srcIdx = {
-    name: srcHeaders.findIndex((h) => /^name$/i.test(h)),
-    type: srcHeaders.findIndex((h) => /^type$/i.test(h)),
+    name: findCol(srcHeaders, /^name$/i),
+    type: findCol(srcHeaders, /^type$/i),
   };
   const sources = sourcesValues
     .filter((r) => r[srcIdx.name])
@@ -173,11 +205,10 @@ export async function getMetadata(token) {
 }
 
 /**
- * Appends one row of raw input data to the Transactions table, scoped to
- * only the input columns (Date..Sub category) — other columns in the row
- * (Main Category, Type, Month, Balance, ...) are left untouched, and the
- * Table's own auto-fill (Convert to Table's calculated-column behavior)
- * fills them in.
+ * Appends one row of raw input data to the *Transactions* table (write-only
+ * target — never read back from directly; the app reads Computed_Transactions
+ * instead). Scoped to only the input columns; other columns in that row are
+ * left untouched for the Table's own calculated-column auto-fill to handle.
  */
 async function appendRow(token, values) {
   const table = await getTable(token, TRANSACTIONS_TABLE);
@@ -203,7 +234,7 @@ async function appendRow(token, values) {
   const startCol = columnLetter(minCol);
   const endCol = columnLetter(maxCol);
   const startRow = table.range.startRowIndex + 2; // first data row
-  const appendRange = `${table.sheetTitle}!${startCol}${startRow}:${endCol}`;
+  const appendRange = `${quoteSheetTitle(table.sheetTitle)}!${startCol}${startRow}:${endCol}`;
 
   await request(
     token,

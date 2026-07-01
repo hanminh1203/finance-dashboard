@@ -11,7 +11,7 @@ import { currentBalances } from './lib/transform';
 
 export default function App() {
   const { token, signedIn, gsiReady, error: authError, signIn, signOut } = useGoogleAuth();
-  const { transactions, metadata, loading, error, refresh } = useFinanceData(token);
+  const { transactions, metadata, monthlySummary, loading, error, refresh } = useFinanceData(token);
   const [tab, setTab] = useState('dashboard');
   const balances = useMemo(() => currentBalances(transactions), [transactions]);
 
@@ -37,7 +37,7 @@ export default function App() {
           <LoadingState />
         ) : (
           <>
-            {tab === 'dashboard' && <Dashboard transactions={transactions} />}
+            {tab === 'dashboard' && <Dashboard transactions={transactions} monthlySummary={monthlySummary} />}
             {tab === 'sources' && <Sources transactions={transactions} metadata={metadata} />}
             {tab === 'add' && (
               <div className="flex justify-center">

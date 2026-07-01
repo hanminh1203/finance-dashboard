@@ -37,6 +37,8 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_SHEET_ID: ${{ secrets.VITE_SHEET_ID }}
           VITE_TRANSACTIONS_TABLE: Transactions
+          VITE_COMPUTED_TRANSACTIONS_TABLE: Computed_Transactions
+          VITE_INCOME_EXPENSE_TABLE: Income vs Expense by Month
           VITE_CATEGORY_TABLE: Category
           VITE_SOURCES_TABLE: Sources
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
