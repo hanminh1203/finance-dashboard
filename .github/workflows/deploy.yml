@@ -43,9 +43,12 @@ jobs:
           VITE_INCOME_EXPENSE_TABLE: Income vs Expense by Month
           VITE_CATEGORY_TABLE: Category
           VITE_SOURCES_TABLE: Sources
+          VITE_RECEIPT_TABLE: Receipt
+          VITE_RECEIPT_ITEMS_TABLE: Receipt_Items
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
           VITE_GROQ_API_KEY: ${{ secrets.VITE_GROQ_API_KEY }}
           VITE_GROQ_MODEL: llama-3.3-70b-versatile
+          VITE_GROQ_VISION_MODEL: meta-llama/llama-4-scout-17b-16e-instruct
         run: npm run build
 
       - uses: actions/upload-pages-artifact@v3

@@ -10,6 +10,9 @@ const COMPUTED_TRANSACTIONS_TABLE = import.meta.env.VITE_COMPUTED_TRANSACTIONS_T
 const INCOME_EXPENSE_TABLE = import.meta.env.VITE_INCOME_EXPENSE_TABLE || 'Income vs Expense by Month';
 const CATEGORY_TABLE = import.meta.env.VITE_CATEGORY_TABLE || 'Category';
 const SOURCES_TABLE = import.meta.env.VITE_SOURCES_TABLE || 'Sources';
+// Written by the receipt-scanning chatbot flow only, after user confirmation.
+const RECEIPT_TABLE = import.meta.env.VITE_RECEIPT_TABLE || 'Receipt';
+const RECEIPT_ITEMS_TABLE = import.meta.env.VITE_RECEIPT_ITEMS_TABLE || 'Receipt_Items';
 const BASE = 'https://sheets.googleapis.com/v4/spreadsheets';
 
 // Raw input columns written by addTransaction/addTransfer, matched by header
@@ -241,6 +244,78 @@ async function appendRow(token, values) {
     `/values/${encodeURIComponent(appendRange)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
     { method: 'POST', body: JSON.stringify({ values: [ordered] }) }
   );
+}
+
+/**
+ * Generic append helper for simple tables whose input columns are
+ * contiguous and cover exactly the columns being written (unlike
+ * Transactions, these tables have no separate calculated columns to
+ * preserve). Appends one or more rows in a single request.
+ *
+ * `headerNames` gives the order values are supplied in; rows are
+ * re-ordered internally to match the table's actual left-to-right column
+ * order before writing.
+ */
+async function appendRows(token, tableName, headerNames, rowsValues) {
+  const table = await getTable(token, tableName);
+  const colIndex = {};
+  for (const name of headerNames) {
+    const col = table.columns.find((c) => c.name === name);
+    if (!col) throw new Error(`Column "${name}" not found in table "${tableName}"`);
+    colIndex[name] = col.index;
+  }
+  const indices = headerNames.map((n) => colIndex[n]);
+  const minCol = Math.min(...indices);
+  const maxCol = Math.max(...indices);
+  if (maxCol - minCol !== headerNames.length - 1) {
+    throw new Error(`Input columns must be contiguous in table "${tableName}"`);
+  }
+
+  const orderedRows = rowsValues.map((values) =>
+    headerNames
+      .map((name, i) => ({ index: colIndex[name], value: values[i] }))
+      .sort((a, b) => a.index - b.index)
+      .map((x) => x.value)
+  );
+
+  const startCol = columnLetter(minCol);
+  const endCol = columnLetter(maxCol);
+  const startRow = table.range.startRowIndex + 2; // first data row
+  const appendRange = `${quoteSheetTitle(table.sheetTitle)}!${startCol}${startRow}:${endCol}`;
+
+  await request(
+    token,
+    `/values/${encodeURIComponent(appendRange)}:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS`,
+    { method: 'POST', body: JSON.stringify({ values: orderedRows }) }
+  );
+}
+
+/**
+ * Writes a confirmed, scanned receipt to the Receipt / Receipt_Items
+ * tables. Generates a fresh Receipt ID (UUID) client-side, writes one row
+ * to Receipt (Receipt ID, Total), then one row per line item to
+ * Receipt_Items (Receipt ID, Name, Amount). This is independent of the
+ * Transactions table — it does not create a transaction row.
+ */
+export async function addReceipt(token, { total, items }) {
+  const totalNum = Math.abs(Number(total));
+  if (!totalNum || Number.isNaN(totalNum)) throw new Error('Invalid receipt total');
+  if (!Array.isArray(items) || items.length === 0) throw new Error('Receipt has no items');
+
+  const receiptId = crypto.randomUUID();
+
+  await appendRows(token, RECEIPT_TABLE, ['Receipt ID', 'Total'], [[receiptId, totalNum]]);
+
+  const itemRows = items.map((it) => {
+    const amount = Math.abs(Number(it.amount));
+    if (!it.name || !amount || Number.isNaN(amount)) {
+      throw new Error(`Invalid receipt item: ${JSON.stringify(it)}`);
+    }
+    return [receiptId, it.name, amount];
+  });
+  await appendRows(token, RECEIPT_ITEMS_TABLE, ['Receipt ID', 'Name', 'Amount'], itemRows);
+
+  return { receiptId, itemsAdded: itemRows.length };
 }
 
 export async function addTransaction(token, { date, amount, type, source, subCategory, comment }) {

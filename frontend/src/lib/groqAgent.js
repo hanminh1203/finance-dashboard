@@ -63,3 +63,73 @@ Rules:
     throw new Error('Groq returned a non-JSON response');
   }
 }
+/**
+ * Sends a receipt photo to a vision-capable Groq model and returns
+ * structured JSON: { total, items: [{ name, amount }] }.
+ *
+ * `imageDataUrl` must be a base64 data URL (e.g. "data:image/jpeg;base64,...").
+ * Note: Groq's vision-capable model names change over time — verify the
+ * current one in Groq's docs/console if VITE_GROQ_VISION_MODEL's default
+ * here is no longer available.
+ */
+export async function parseReceiptImage({ apiKey, model, imageDataUrl }) {
+  const systemPrompt = `You are a receipt-scanning assistant. Look at the receipt image and extract structured data.
+Return ONLY valid JSON (no markdown, no extra text) matching exactly this schema:
+
+{"total": number, "items": [{"name": string, "amount": number}]}
+
+Rules:
+- "total" is the final total amount actually paid (after tax/discounts), as a positive number.
+- "items" is every line item on the receipt with its name and price, each a positive number.
+- Use the item names as printed on the receipt (cleaned up if garbled), do not invent items.
+- If a field truly cannot be read, omit that item rather than guessing wildly.
+- If the image is not a readable receipt at all, return {"total": 0, "items": []}.`;
+
+  const res = await fetch(GROQ_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Extract the total and line items from this receipt.' },
+            { type: 'image_url', image_url: { url: imageDataUrl } },
+          ],
+        },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body?.error?.message || `Groq API error: ${res.status} ${res.statusText}`);
+  }
+
+  const data = await res.json();
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error('No response from Groq');
+
+  let parsed;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    throw new Error('Groq returned a non-JSON response');
+  }
+
+  const total = Number(parsed.total) || 0;
+  const items = Array.isArray(parsed.items)
+    ? parsed.items
+        .map((it) => ({ name: String(it.name || '').trim(), amount: Number(it.amount) || 0 }))
+        .filter((it) => it.name && it.amount > 0)
+    : [];
+
+  return { total, items };
+}
