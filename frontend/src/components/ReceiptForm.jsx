@@ -1,0 +1,306 @@
+import { useMemo, useState } from 'react';
+import Card from './Card';
+import { Field, inputClass, selectClass } from './FormField';
+import { addReceipt } from '../lib/sheetsApi';
+import { formatAUD } from '../lib/transform';
+
+const UNITS = ['kg', 'g', 'ml', 'l', 'piece'];
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const emptySource = () => ({ source: '', amount: '' });
+const emptyItem = () => ({ name: '', amount: '', unit: 'piece', money: '' });
+
+export default function ReceiptForm({ metadata, token, onSaved }) {
+  const [store, setStore] = useState('');
+  const [date, setDate] = useState(todayISO());
+  const [subCategory, setSubCategory] = useState('');
+  const [comment, setComment] = useState('');
+  const [sources, setSources] = useState([emptySource()]);
+  const [items, setItems] = useState([emptyItem()]);
+  const [submitting, setSubmitting] = useState(false);
+  const [status, setStatus] = useState(null);
+
+  const expenseCategories = useMemo(
+    () => metadata.categories.filter((c) => c.type === 'Expense'),
+    [metadata.categories]
+  );
+
+  const itemsTotal = useMemo(
+    () => items.reduce((sum, it) => sum + (Math.abs(Number(it.money)) || 0), 0),
+    [items]
+  );
+
+  const sourcesTotal = useMemo(
+    () => sources.reduce((sum, s) => sum + (Math.abs(Number(s.amount)) || 0), 0),
+    [sources]
+  );
+
+  const sourcesMatch =
+    itemsTotal > 0 && Math.abs(itemsTotal - sourcesTotal) < 0.009;
+
+  const canSubmit =
+    store.trim() &&
+    date &&
+    subCategory &&
+    items.some((it) => it.name.trim() && Number(it.money) > 0) &&
+    sources.some((s) => s.source && Number(s.amount) > 0) &&
+    sourcesMatch &&
+    !submitting;
+
+  function updateSource(index, patch) {
+    setSources((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
+  }
+
+  function updateItem(index, patch) {
+    setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setStatus(null);
+    try {
+      const result = await addReceipt(token, {
+        date,
+        store,
+        subCategory,
+        comment,
+        sources: sources.filter((s) => s.source && Number(s.amount) > 0),
+        items: items.filter((it) => it.name.trim() && Number(it.money) > 0),
+      });
+      setStatus({
+        ok: true,
+        msg: `Receipt saved (${result.items} items, ${result.transactions} payment${result.transactions === 1 ? '' : 's'}).`,
+      });
+      setStore('');
+      setComment('');
+      setSubCategory('');
+      setSources([emptySource()]);
+      setItems([emptyItem()]);
+      onSaved?.();
+    } catch (err) {
+      setStatus({ ok: false, msg: err.message || String(err) });
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Card title="Add Receipt" className="max-w-2xl w-full">
+      <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Store">
+            <input
+              type="text"
+              placeholder="e.g. Woolworths"
+              value={store}
+              onChange={(e) => setStore(e.target.value)}
+              className={inputClass}
+              required
+            />
+          </Field>
+          <Field label="Date">
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className={inputClass}
+              required
+            />
+          </Field>
+        </div>
+
+        <Field label="Sub Category">
+          <select
+            value={subCategory}
+            onChange={(e) => setSubCategory(e.target.value)}
+            className={selectClass}
+            required
+          >
+            <option value="" disabled>
+              Select a category
+            </option>
+            {expenseCategories.map((c) => (
+              <option key={`${c.mainCategory}-${c.subCategory}`} value={c.subCategory}>
+                {c.mainCategory} — {c.subCategory}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <Field label="Comment (optional)">
+          <input
+            type="text"
+            placeholder="e.g. weekly groceries"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            className={inputClass}
+          />
+        </Field>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium text-text-secondary">Payment sources</h4>
+            <button
+              type="button"
+              onClick={() => setSources((prev) => [...prev, emptySource()])}
+              className="text-sm text-accent hover:text-accent-hover cursor-pointer"
+            >
+              + Add source
+            </button>
+          </div>
+          <div className="space-y-2">
+            {sources.map((s, i) => (
+              <div key={i} className="grid grid-cols-[1fr_7rem_auto] gap-2 items-end">
+                <Field label={i === 0 ? 'Source' : undefined}>
+                  <select
+                    value={s.source}
+                    onChange={(e) => updateSource(i, { source: e.target.value })}
+                    className={selectClass}
+                    required
+                  >
+                    <option value="" disabled>
+                      Select source
+                    </option>
+                    {metadata.sources.map((src) => (
+                      <option key={src.name} value={src.name}>
+                        {src.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label={i === 0 ? 'Amount' : undefined}>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={s.amount}
+                    onChange={(e) => updateSource(i, { amount: e.target.value })}
+                    className={inputClass}
+                    required
+                  />
+                </Field>
+                <button
+                  type="button"
+                  disabled={sources.length === 1}
+                  onClick={() => setSources((prev) => prev.filter((_, j) => j !== i))}
+                  aria-label="Remove source"
+                  className="mb-0.5 p-2.5 rounded-lg text-text-muted hover:text-expense hover:bg-expense/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-medium text-text-secondary">Items</h4>
+            <button
+              type="button"
+              onClick={() => setItems((prev) => [...prev, emptyItem()])}
+              className="text-sm text-accent hover:text-accent-hover cursor-pointer"
+            >
+              + Add item
+            </button>
+          </div>
+          <div className="space-y-3">
+            {items.map((it, i) => (
+              <div
+                key={i}
+                className="grid grid-cols-1 sm:grid-cols-[1fr_5rem_5.5rem_6rem_auto] gap-2 items-end p-3 rounded-lg bg-bg-raised/50 border border-bg-border/60"
+              >
+                <Field label="Name">
+                  <input
+                    type="text"
+                    placeholder="Item name"
+                    value={it.name}
+                    onChange={(e) => updateItem(i, { name: e.target.value })}
+                    className={inputClass}
+                    required
+                  />
+                </Field>
+                <Field label="Amount">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    min="0"
+                    placeholder="0"
+                    value={it.amount}
+                    onChange={(e) => updateItem(i, { amount: e.target.value })}
+                    className={inputClass}
+                  />
+                </Field>
+                <Field label="Unit">
+                  <select
+                    value={it.unit}
+                    onChange={(e) => updateItem(i, { unit: e.target.value })}
+                    className={selectClass}
+                    required
+                  >
+                    {UNITS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Money">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={it.money}
+                    onChange={(e) => updateItem(i, { money: e.target.value })}
+                    className={inputClass}
+                    required
+                  />
+                </Field>
+                <button
+                  type="button"
+                  disabled={items.length === 1}
+                  onClick={() => setItems((prev) => prev.filter((_, j) => j !== i))}
+                  aria-label="Remove item"
+                  className="sm:mb-0.5 p-2.5 rounded-lg text-text-muted hover:text-expense hover:bg-expense/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer justify-self-end"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="flex items-center justify-between px-1">
+          <span className="text-sm text-text-secondary">Total from items</span>
+          <span className="text-lg font-semibold text-text-primary tabular-nums">
+            {formatAUD(itemsTotal)}
+          </span>
+        </div>
+
+        {itemsTotal > 0 && !sourcesMatch && (
+          <p className="text-sm text-expense">
+            Payment sources ({formatAUD(sourcesTotal)}) must equal items total ({formatAUD(itemsTotal)}).
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          className="w-full py-2.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors cursor-pointer"
+        >
+          {submitting ? 'Saving…' : 'Save Receipt'}
+        </button>
+
+        {status && (
+          <p className={`text-sm ${status.ok ? 'text-income' : 'text-expense'}`}>{status.msg}</p>
+        )}
+      </form>
+    </Card>
+  );
+}

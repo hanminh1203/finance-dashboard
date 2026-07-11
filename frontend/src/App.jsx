@@ -4,6 +4,7 @@ import SignInScreen from './components/SignInScreen';
 import Dashboard from './pages/Dashboard';
 import Sources from './pages/Sources';
 import AddTransactionForm from './components/AddTransactionForm';
+import ReceiptForm from './components/ReceiptForm';
 import TransferForm from './components/TransferForm';
 import { useGoogleAuth } from './hooks/useGoogleAuth';
 import { useFinanceData } from './hooks/useFinanceData';
@@ -43,6 +44,11 @@ export default function App() {
             {tab === 'add' && (
               <div className="flex justify-center">
                 <AddTransactionForm metadata={metadata} token={token} onSaved={refresh} />
+              </div>
+            )}
+            {tab === 'receipt' && (
+              <div className="flex justify-center">
+                <ReceiptForm metadata={metadata} token={token} onSaved={refresh} />
               </div>
             )}
             {tab === 'transfer' && (
