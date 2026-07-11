@@ -1,10 +1,15 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Card from './Card';
 import { Field, inputClass, selectClass } from './FormField';
 import { addReceipt } from '../lib/sheetsApi';
+import { extractReceiptFromImage, fileToDataUrl } from '../lib/groqAgent';
 import { formatAUD } from '../lib/transform';
 
 const UNITS = ['kg', 'g', 'ml', 'l', 'piece'];
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const GROQ_VISION_MODEL =
+  import.meta.env.VITE_GROQ_VISION_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
+
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const emptySource = () => ({ source: '', amount: '' });
 const emptyItem = () => ({ name: '', amount: '', unit: 'piece', money: '' });
@@ -17,7 +22,10 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
   const [sources, setSources] = useState([emptySource()]);
   const [items, setItems] = useState([emptyItem()]);
   const [submitting, setSubmitting] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [status, setStatus] = useState(null);
+  const fileInputRef = useRef(null);
 
   const expenseCategories = useMemo(
     () => metadata.categories.filter((c) => c.type === 'Expense'),
@@ -44,7 +52,8 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
     items.some((it) => it.name.trim() && Number(it.money) > 0) &&
     sources.some((s) => s.source && Number(s.amount) > 0) &&
     sourcesMatch &&
-    !submitting;
+    !submitting &&
+    !extracting;
 
   function updateSource(index, patch) {
     setSources((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
@@ -52,6 +61,47 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
 
   function updateItem(index, patch) {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
+  }
+
+  async function handleImageSelected(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (!GROQ_API_KEY) {
+      setStatus({ ok: false, msg: 'VITE_GROQ_API_KEY is not set. Add it to frontend/.env.' });
+      return;
+    }
+
+    setExtracting(true);
+    setStatus(null);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      setPreviewUrl(dataUrl);
+
+      const extracted = await extractReceiptFromImage({
+        apiKey: GROQ_API_KEY,
+        model: GROQ_VISION_MODEL,
+        imageDataUrl: dataUrl,
+        metadata,
+      });
+
+      // Replace every form field with the AI result (do not merge).
+      setStore(extracted.store);
+      setDate(extracted.date);
+      setSubCategory(extracted.subCategory);
+      setComment(extracted.comment);
+      setSources(extracted.sources);
+      setItems(extracted.items);
+      setStatus({
+        ok: true,
+        msg: `Extracted ${extracted.items.filter((it) => it.name).length} item(s) from receipt — review and save.`,
+      });
+    } catch (err) {
+      setStatus({ ok: false, msg: err.message || String(err) });
+    } finally {
+      setExtracting(false);
+    }
   }
 
   async function handleSubmit(e) {
@@ -77,6 +127,7 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
       setSubCategory('');
       setSources([emptySource()]);
       setItems([emptyItem()]);
+      setPreviewUrl(null);
       onSaved?.();
     } catch (err) {
       setStatus({ ok: false, msg: err.message || String(err) });
@@ -88,6 +139,40 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
   return (
     <Card title="Add Receipt" className="max-w-2xl w-full">
       <form onSubmit={handleSubmit} className="space-y-5">
+        <div className="rounded-lg border border-dashed border-bg-border bg-bg-raised/40 p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-medium text-text-primary">Scan with AI</p>
+              <p className="text-xs text-text-muted mt-0.5">
+                Upload a receipt photo — Groq fills the form (replaces existing values).
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={extracting}
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3 py-2 rounded-lg bg-bg-raised border border-bg-border text-sm text-text-primary hover:border-accent disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+            >
+              {extracting ? 'Extracting…' : 'Upload image'}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handleImageSelected}
+            />
+          </div>
+          {previewUrl && (
+            <img
+              src={previewUrl}
+              alt="Receipt preview"
+              className="max-h-40 rounded-md border border-bg-border object-contain bg-bg"
+            />
+          )}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Field label="Store">
             <input
