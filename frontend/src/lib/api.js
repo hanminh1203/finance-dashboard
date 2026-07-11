@@ -1,0 +1,87 @@
+/** Thin client for the Django /api backend (cookie session + CSRF). */
+
+function getCookie(name) {
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+async function api(path, { method = 'GET', body, headers } = {}) {
+  const opts = {
+    method,
+    credentials: 'include',
+    headers: { ...(headers || {}) },
+  };
+
+  if (body !== undefined) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+
+  if (method !== 'GET' && method !== 'HEAD') {
+    const csrf = getCookie('csrftoken');
+    if (csrf) opts.headers['X-CSRFToken'] = csrf;
+  }
+
+  const res = await fetch(`/api${path}`, opts);
+  const text = await res.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { error: text };
+    }
+  }
+
+  if (!res.ok) {
+    const msg = data?.error || `${res.status} ${res.statusText}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+export function fetchMe() {
+  return api('/auth/me');
+}
+
+export function loginUrl() {
+  return '/api/auth/google/login';
+}
+
+export function logout() {
+  return api('/auth/logout', { method: 'POST' });
+}
+
+export function getTransactionData() {
+  return api('/transactions');
+}
+
+export function getMetadata() {
+  return api('/metadata');
+}
+
+export function getIncomeExpenseByMonth() {
+  return api('/income-expense');
+}
+
+export function addTransaction(payload) {
+  return api('/transactions', { method: 'POST', body: payload });
+}
+
+export function addTransfer(payload) {
+  return api('/transfers', { method: 'POST', body: payload });
+}
+
+export function addReceipt(payload) {
+  return api('/receipts', { method: 'POST', body: payload });
+}
+
+export function parseFinanceMessage({ message, metadata }) {
+  return api('/assistant/parse', { method: 'POST', body: { message, metadata } });
+}
+
+export function extractReceiptFromImage({ imageDataUrl, metadata }) {
+  return api('/receipts/ocr', { method: 'POST', body: { imageDataUrl, metadata } });
+}

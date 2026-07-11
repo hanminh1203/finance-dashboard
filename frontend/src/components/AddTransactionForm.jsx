@@ -1,11 +1,11 @@
 import { useMemo, useState } from 'react';
 import Card from './Card';
 import { Field, inputClass, selectClass } from './FormField';
-import { addTransaction } from '../lib/sheetsApi';
+import { addTransaction } from '../lib/api';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-export default function AddTransactionForm({ metadata, token, onSaved }) {
+export default function AddTransactionForm({ metadata, onSaved }) {
   const [type, setType] = useState('Expense');
   const [date, setDate] = useState(todayISO());
   const [amount, setAmount] = useState('');
@@ -28,7 +28,7 @@ export default function AddTransactionForm({ metadata, token, onSaved }) {
     setSubmitting(true);
     setStatus(null);
     try {
-      await addTransaction(token, { date, amount, type, source, subCategory, comment });
+      await addTransaction({ date, amount, type, source, subCategory, comment });
       setStatus({ ok: true, msg: 'Transaction added.' });
       setAmount('');
       setComment('');

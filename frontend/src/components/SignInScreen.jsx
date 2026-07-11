@@ -10,7 +10,7 @@ export default function SignInScreen({ onSignIn, error, ready }) {
           Sign in with the Google account that has access to your "Money Tracking - AUD" spreadsheet.
         </p>
         <button
-          onClick={() => onSignIn(false)}
+          onClick={() => onSignIn()}
           disabled={!ready}
           className="w-full py-2.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 text-white font-medium transition-colors cursor-pointer flex items-center justify-center gap-2"
         >
@@ -20,7 +20,7 @@ export default function SignInScreen({ onSignIn, error, ready }) {
           Sign in with Google
         </button>
         {error && <p className="mt-4 text-sm text-expense">{error}</p>}
-        {!ready && !error && <p className="mt-4 text-sm text-text-muted">Loading Google Sign-In…</p>}
+        {!ready && !error && <p className="mt-4 text-sm text-text-muted">Checking session…</p>}
       </div>
     </div>
   );

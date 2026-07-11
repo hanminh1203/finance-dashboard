@@ -1,20 +1,17 @@
 import { useMemo, useRef, useState } from 'react';
 import Card from './Card';
 import { Field, inputClass, selectClass } from './FormField';
-import { addReceipt } from '../lib/sheetsApi';
-import { extractReceiptFromImage, fileToDataUrl } from '../lib/groqAgent';
+import { addReceipt, extractReceiptFromImage } from '../lib/api';
+import { fileToDataUrl } from '../lib/imageUtils';
 import { formatAUD } from '../lib/transform';
 
 const UNITS = ['kg', 'g', 'ml', 'l', 'piece'];
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
-const GROQ_VISION_MODEL =
-  import.meta.env.VITE_GROQ_VISION_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const emptySource = () => ({ source: '', amount: '' });
 const emptyItem = () => ({ name: '', amount: '', unit: 'piece', money: '' });
 
-export default function ReceiptForm({ metadata, token, onSaved }) {
+export default function ReceiptForm({ metadata, onSaved }) {
   const [store, setStore] = useState('');
   const [date, setDate] = useState(todayISO());
   const [subCategory, setSubCategory] = useState('');
@@ -68,11 +65,6 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
     e.target.value = '';
     if (!file) return;
 
-    if (!GROQ_API_KEY) {
-      setStatus({ ok: false, msg: 'VITE_GROQ_API_KEY is not set. Add it to frontend/.env.' });
-      return;
-    }
-
     setExtracting(true);
     setStatus(null);
     try {
@@ -80,8 +72,6 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
       setPreviewUrl(dataUrl);
 
       const extracted = await extractReceiptFromImage({
-        apiKey: GROQ_API_KEY,
-        model: GROQ_VISION_MODEL,
         imageDataUrl: dataUrl,
         metadata,
       });
@@ -110,7 +100,7 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
     setSubmitting(true);
     setStatus(null);
     try {
-      const result = await addReceipt(token, {
+      const result = await addReceipt({
         date,
         store,
         subCategory,

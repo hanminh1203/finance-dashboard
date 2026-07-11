@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getTransactionData, getMetadata, getIncomeExpenseByMonth } from '../lib/sheetsApi';
+import { getTransactionData, getMetadata, getIncomeExpenseByMonth } from '../lib/api';
 import { normalizeRows } from '../lib/transform';
 
-export function useFinanceData(token) {
+export function useFinanceData(signedIn) {
   const [transactions, setTransactions] = useState([]);
   const [metadata, setMetadata] = useState({ sources: [], categories: [] });
   const [monthlySummary, setMonthlySummary] = useState([]);
@@ -10,14 +10,14 @@ export function useFinanceData(token) {
   const [error, setError] = useState(null);
 
   const refresh = useCallback(async () => {
-    if (!token) return;
+    if (!signedIn) return;
     setLoading(true);
     setError(null);
     try {
       const [dataRes, metaRes, monthRes] = await Promise.all([
-        getTransactionData(token),
-        getMetadata(token),
-        getIncomeExpenseByMonth(token),
+        getTransactionData(),
+        getMetadata(),
+        getIncomeExpenseByMonth(),
       ]);
       setTransactions(normalizeRows(dataRes.rows));
       setMetadata(metaRes);
@@ -27,7 +27,7 @@ export function useFinanceData(token) {
     } finally {
       setLoading(false);
     }
-  }, [token]);
+  }, [signedIn]);
 
   useEffect(() => {
     refresh();

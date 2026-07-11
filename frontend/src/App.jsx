@@ -6,19 +6,19 @@ import Sources from './pages/Sources';
 import AddTransactionForm from './components/AddTransactionForm';
 import ReceiptForm from './components/ReceiptForm';
 import TransferForm from './components/TransferForm';
-import { useGoogleAuth } from './hooks/useGoogleAuth';
+import { useAuth } from './hooks/useAuth';
 import { useFinanceData } from './hooks/useFinanceData';
 import { currentBalances } from './lib/transform';
 import ChatBot from './components/ChatBot';
 
 export default function App() {
-  const { token, signedIn, gsiReady, error: authError, signIn, signOut } = useGoogleAuth();
-  const { transactions, metadata, monthlySummary, loading, error, refresh } = useFinanceData(token);
+  const { signedIn, ready, error: authError, signIn, signOut } = useAuth();
+  const { transactions, metadata, monthlySummary, loading, error, refresh } = useFinanceData(signedIn);
   const [tab, setTab] = useState('dashboard');
   const balances = useMemo(() => currentBalances(transactions), [transactions]);
 
   if (!signedIn) {
-    return <SignInScreen onSignIn={signIn} error={authError} ready={gsiReady} />;
+    return <SignInScreen onSignIn={signIn} error={authError} ready={ready} />;
   }
 
   return (
@@ -43,21 +43,21 @@ export default function App() {
             {tab === 'sources' && <Sources transactions={transactions} metadata={metadata} />}
             {tab === 'add' && (
               <div className="flex justify-center">
-                <AddTransactionForm metadata={metadata} token={token} onSaved={refresh} />
+                <AddTransactionForm metadata={metadata} onSaved={refresh} />
               </div>
             )}
             {tab === 'receipt' && (
               <div className="flex justify-center">
-                <ReceiptForm metadata={metadata} token={token} onSaved={refresh} />
+                <ReceiptForm metadata={metadata} onSaved={refresh} />
               </div>
             )}
             {tab === 'transfer' && (
               <div className="flex justify-center">
-                <TransferForm metadata={metadata} balances={balances} token={token} onSaved={refresh} />
+                <TransferForm metadata={metadata} balances={balances} onSaved={refresh} />
               </div>
             )}
             {tab === 'chat' && (
-              <ChatBot metadata={metadata} token={token} onSaved={refresh} />
+              <ChatBot metadata={metadata} onSaved={refresh} />
             )}
           </>
         )}

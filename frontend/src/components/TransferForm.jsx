@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import Card from './Card';
 import { Field, inputClass, selectClass } from './FormField';
-import { addTransfer } from '../lib/sheetsApi';
+import { addTransfer } from '../lib/api';
 import { formatAUD } from '../lib/transform';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-export default function TransferForm({ metadata, balances, token, onSaved }) {
+export default function TransferForm({ metadata, balances, onSaved }) {
   const [date, setDate] = useState(todayISO());
   const [amount, setAmount] = useState('');
   const [fromSource, setFromSource] = useState('');
@@ -23,7 +23,7 @@ export default function TransferForm({ metadata, balances, token, onSaved }) {
     setSubmitting(true);
     setStatus(null);
     try {
-      await addTransfer(token, { date, amount, fromSource, toSource, comment });
+      await addTransfer({ date, amount, fromSource, toSource, comment });
       setStatus({ ok: true, msg: 'Transfer recorded (2 linked transactions).' });
       setAmount('');
       setComment('');
