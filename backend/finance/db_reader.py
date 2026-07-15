@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from django.db.models import QuerySet
+from django.db.models import Case, DecimalField, QuerySet, Sum, Value, When
+from django.db.models.functions import TruncMonth
 
 from finance.comment_parse import parse_store_comment
 from finance.models import Category, Receipt, Source, Transaction
@@ -104,6 +105,51 @@ def get_transaction_data(
         'total': total,
         'totalPages': total_pages,
     }
+
+
+def get_income_expense_by_month() -> list[dict]:
+    """Aggregate Income/Expense transactions by calendar month from Postgres.
+
+    Returns [{ month: 'YYYY/MM', income, expense }, ...] sorted ascending.
+    Expense sums are signed (typically negative). Transfers / uncategorized
+    rows are excluded.
+    """
+    zero = Value(0, output_field=DecimalField(max_digits=14, decimal_places=2))
+    rows = (
+        Transaction.objects.filter(category__type__in=('Income', 'Expense'))
+        .annotate(month=TruncMonth('date'))
+        .values('month')
+        .annotate(
+            income=Sum(
+                Case(
+                    When(category__type='Income', then='change'),
+                    default=zero,
+                    output_field=DecimalField(max_digits=14, decimal_places=2),
+                )
+            ),
+            expense=Sum(
+                Case(
+                    When(category__type='Expense', then='change'),
+                    default=zero,
+                    output_field=DecimalField(max_digits=14, decimal_places=2),
+                )
+            ),
+        )
+        .order_by('month')
+    )
+    result = []
+    for row in rows:
+        month_date = row['month']
+        if month_date is None:
+            continue
+        result.append(
+            {
+                'month': f'{month_date.year}/{month_date.month:02d}',
+                'income': _dec_to_number(row['income'] or Decimal('0')),
+                'expense': _dec_to_number(row['expense'] or Decimal('0')),
+            }
+        )
+    return result
 
 
 def get_receipt(receipt_id: str) -> dict:

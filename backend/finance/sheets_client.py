@@ -165,28 +165,6 @@ class SheetsClient:
                 return i
         return -1
 
-    def get_income_expense_by_month(self) -> list[dict]:
-        table = self.get_table(settings.INCOME_EXPENSE_TABLE)
-        values = self.get_values(self.data_range_a1(table))
-        headers = [c['name'] for c in table['columns']]
-        idx = {
-            'month': self.find_col(headers, r'^month$'),
-            'income': self.find_col(headers, r'^income$'),
-            'expense': self.find_col(headers, r'^expense$'),
-        }
-        result = []
-        for r in values:
-            if idx['month'] < 0 or idx['month'] >= len(r) or not r[idx['month']]:
-                continue
-            result.append(
-                {
-                    'month': str(r[idx['month']]).strip(),
-                    'income': parse_amount(r[idx['income']] if idx['income'] >= 0 else 0),
-                    'expense': parse_amount(r[idx['expense']] if idx['expense'] >= 0 else 0),
-                }
-            )
-        return result
-
     def get_metadata(self) -> dict:
         category_table = self.get_table(settings.CATEGORY_TABLE)
         sources_table = self.get_table(settings.SOURCES_TABLE)

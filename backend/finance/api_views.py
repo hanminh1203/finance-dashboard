@@ -20,6 +20,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from . import oauth
 from .db_reader import (
     ReaderError,
+    get_income_expense_by_month as db_get_income_expense_by_month,
     get_metadata as db_get_metadata,
     get_receipt as db_get_receipt,
     get_transaction_data,
@@ -185,11 +186,7 @@ def metadata(request: HttpRequest) -> JsonResponse:
 @require_GET
 @require_auth
 def income_expense(request: HttpRequest) -> JsonResponse:
-    try:
-        data = sheets_for(request).get_income_expense_by_month()
-    except SheetsError as exc:
-        return json_error(str(exc), status=exc.status or 502)
-    return JsonResponse(data, safe=False)
+    return JsonResponse(db_get_income_expense_by_month(), safe=False)
 
 
 @require_http_methods(['POST'])
