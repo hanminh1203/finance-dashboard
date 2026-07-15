@@ -13,7 +13,7 @@ import ChatBot from './components/ChatBot';
 
 export default function App() {
   const { signedIn, ready, error: authError, signIn, signOut } = useAuth();
-  const { transactions, metadata, monthlySummary, loading, error, refresh } = useFinanceData(signedIn);
+  const { transactions, metadata, monthlySummary, loading, error, refresh, listVersion } = useFinanceData(signedIn);
   const [tab, setTab] = useState('dashboard');
   const balances = useMemo(() => currentBalances(transactions), [transactions]);
 
@@ -40,13 +40,15 @@ export default function App() {
         ) : (
           <>
             {tab === 'dashboard' && <Dashboard transactions={transactions} monthlySummary={monthlySummary} />}
-            {tab === 'sources' && <Sources transactions={transactions} metadata={metadata} />}
+            {tab === 'sources' && (
+              <Sources transactions={transactions} metadata={metadata} listVersion={listVersion} />
+            )}
             {tab === 'transactions' && (
               <Transactions
-                transactions={transactions}
                 metadata={metadata}
                 balances={balances}
                 onSaved={refresh}
+                listVersion={listVersion}
               />
             )}
             {tab === 'health' && <Health />}

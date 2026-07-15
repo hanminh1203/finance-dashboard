@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.db.models import QuerySet
+
 from finance.comment_parse import parse_store_comment
 from finance.models import Receipt, Transaction
 
@@ -16,6 +18,8 @@ TRANSACTION_HEADERS = [
     'Receipt ID',
 ]
 
+DEFAULT_PAGE_SIZE = 10
+
 
 class ReaderError(Exception):
     def __init__(self, message: str, status: int = 400):
@@ -27,26 +31,62 @@ def _dec_to_number(value: Decimal) -> float:
     return float(value)
 
 
-def get_transaction_data() -> dict:
-    """Return sheet-shaped transaction rows from Postgres (no Main Category/Type)."""
+def _tx_row(tx: Transaction) -> dict:
+    return {
+        'Date': tx.date.isoformat(),
+        'Change': _dec_to_number(tx.change),
+        'Source': tx.source.name if tx.source_id else '',
+        'Comment': tx.comment,
+        'Sub category': tx.category.sub_category if tx.category_id else '',
+        'Receipt ID': str(tx.receipt_id) if tx.receipt_id else None,
+        'Creation Date': tx.creation_date.isoformat() if tx.creation_date else None,
+        '__row': tx.row_number,
+    }
+
+
+def _base_queryset(*, source: str | None = None) -> QuerySet[Transaction]:
     qs = Transaction.objects.select_related('source', 'category', 'receipt').order_by(
         '-date', '-creation_date'
     )
-    rows = []
-    for tx in qs.iterator():
-        rows.append(
-            {
-                'Date': tx.date.isoformat(),
-                'Change': _dec_to_number(tx.change),
-                'Source': tx.source.name if tx.source_id else '',
-                'Comment': tx.comment,
-                'Sub category': tx.category.sub_category if tx.category_id else '',
-                'Receipt ID': str(tx.receipt_id) if tx.receipt_id else None,
-                'Creation Date': tx.creation_date.isoformat() if tx.creation_date else None,
-                '__row': tx.row_number,
-            }
-        )
-    return {'headers': list(TRANSACTION_HEADERS), 'rows': rows}
+    name = (source or '').strip()
+    if name:
+        qs = qs.filter(source__name=name)
+    return qs
+
+
+def get_transaction_data(
+    *,
+    page: int | None = None,
+    source: str | None = None,
+) -> dict:
+    """Return sheet-shaped transaction rows from Postgres (no Main Category/Type).
+
+    Without page: all matching rows (Dashboard / aggregates).
+    With page: LIMIT/OFFSET using backend DEFAULT_PAGE_SIZE, plus total count.
+    """
+    qs = _base_queryset(source=source)
+    headers = list(TRANSACTION_HEADERS)
+
+    if page is None:
+        rows = [_tx_row(tx) for tx in qs.iterator()]
+        return {'headers': headers, 'rows': rows}
+
+    page = max(1, int(page))
+    size = DEFAULT_PAGE_SIZE
+    total = qs.count()
+    total_pages = max(1, (total + size - 1) // size) if total else 1
+    if page > total_pages:
+        page = total_pages
+    offset = (page - 1) * size
+    rows = [_tx_row(tx) for tx in qs[offset : offset + size]]
+    return {
+        'headers': headers,
+        'rows': rows,
+        'page': page,
+        'pageSize': size,
+        'total': total,
+        'totalPages': total_pages,
+    }
 
 
 def get_receipt(receipt_id: str) -> dict:

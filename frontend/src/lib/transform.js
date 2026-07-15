@@ -45,11 +45,11 @@ export function formatDateShort(date) {
  * Normalizes raw transaction rows into a consistent shape.
  * Joins Main Category / Type from metadata categories by sub category.
  */
-export function normalizeRows(rows, categories = []) {
+export function normalizeRows(rows, categories = [], { sort = true } = {}) {
   const bySub = new Map(
     (categories || []).map((c) => [String(c.subCategory || '').trim(), c])
   );
-  return rows
+  const mapped = rows
     .map((r) => {
       const subCategory = String(r['Sub category'] || r['Sub Category'] || '').trim();
       const cat = bySub.get(subCategory);
@@ -66,8 +66,10 @@ export function normalizeRows(rows, categories = []) {
         receiptId: String(r['Receipt ID'] || r.receiptId || '').trim() || null,
       };
     })
-    .filter((r) => r.date && r.source)
-    .sort((a, b) => (a.date - b.date) || ((a.creationDate || 0) - (b.creationDate || 0)));
+    .filter((r) => r.date && r.source);
+
+  if (!sort) return mapped;
+  return mapped.sort((a, b) => (a.date - b.date) || ((a.creationDate || 0) - (b.creationDate || 0)));
 }
 
 /** Running balance per source, keyed by source name -> current balance. */
@@ -127,8 +129,4 @@ export function categoryBreakdown(transactions, monthFilter = 'all') {
 /** Newest date first; newest creation_date first when dates match. */
 export function compareTransactionsDesc(a, b) {
   return (b.date - a.date) || ((b.creationDate || 0) - (a.creationDate || 0));
-}
-
-export function transactionsBySource(transactions, source) {
-  return transactions.filter((t) => t.source === source).slice().sort(compareTransactionsDesc);
 }

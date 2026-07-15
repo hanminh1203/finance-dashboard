@@ -8,6 +8,7 @@ export function useFinanceData(signedIn) {
   const [monthlySummary, setMonthlySummary] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [listVersion, setListVersion] = useState(0);
 
   const refresh = useCallback(async () => {
     if (!signedIn) return;
@@ -22,6 +23,7 @@ export function useFinanceData(signedIn) {
       setTransactions(normalizeRows(dataRes.rows, metaRes.categories));
       setMetadata(metaRes);
       setMonthlySummary(monthRes);
+      setListVersion((v) => v + 1);
     } catch (err) {
       setError(err.message || String(err));
     } finally {
@@ -33,5 +35,5 @@ export function useFinanceData(signedIn) {
     refresh();
   }, [refresh]);
 
-  return { transactions, metadata, monthlySummary, loading, error, refresh };
+  return { transactions, metadata, monthlySummary, loading, error, refresh, listVersion };
 }

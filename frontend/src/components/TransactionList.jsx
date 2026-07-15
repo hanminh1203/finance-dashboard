@@ -6,16 +6,35 @@ import { formatAUD, formatDateShort } from '../lib/transform';
 const viewBtnClass =
   'px-2 py-1 rounded-md border border-bg-border bg-bg-raised text-xs text-text-secondary hover:text-text-primary hover:border-accent transition-colors cursor-pointer';
 
-export default function TransactionList({ transactions, emptyLabel = 'No transactions yet' }) {
+const pageBtnClass =
+  'px-3 py-1.5 rounded-md border border-bg-border bg-bg-raised text-xs text-text-secondary hover:text-text-primary hover:border-accent transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-bg-border disabled:hover:text-text-secondary';
+
+export default function TransactionList({
+  transactions,
+  emptyLabel = 'No transactions yet',
+  page,
+  pageSize,
+  total,
+  totalPages,
+  onPageChange,
+  loading = false,
+}) {
   const [viewReceiptId, setViewReceiptId] = useState(null);
 
-  if (transactions.length === 0) {
+  const paginated = Number.isFinite(pageSize) && pageSize > 0 && total != null;
+  const safePage = paginated ? Math.min(Math.max(1, page || 1), Math.max(1, totalPages || 1)) : 1;
+  const pages = paginated ? Math.max(1, totalPages || 1) : 1;
+
+  if (!loading && transactions.length === 0) {
     return <div className="text-text-muted text-sm py-8 text-center">{emptyLabel}</div>;
   }
 
+  const from = paginated && total > 0 ? (safePage - 1) * pageSize + 1 : transactions.length ? 1 : 0;
+  const to = paginated && total > 0 ? Math.min(safePage * pageSize, total) : transactions.length;
+
   return (
     <>
-      <div className="overflow-x-auto scrollbar-thin">
+      <div className={`overflow-x-auto scrollbar-thin ${loading ? 'opacity-60' : ''}`}>
         <table className="w-full text-sm">
           <thead>
             <tr className="text-left text-text-muted border-b border-bg-border">
@@ -55,6 +74,35 @@ export default function TransactionList({ transactions, emptyLabel = 'No transac
           </tbody>
         </table>
       </div>
+
+      {paginated && (
+        <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-bg-border">
+          <p className="text-xs text-text-muted tabular-nums">
+            {total === 0 ? '0 of 0' : `${from}–${to} of ${total}`}
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className={pageBtnClass}
+              disabled={loading || safePage <= 1}
+              onClick={() => onPageChange?.(safePage - 1)}
+            >
+              Previous
+            </button>
+            <span className="text-xs text-text-secondary tabular-nums px-1">
+              Page {safePage} of {pages}
+            </span>
+            <button
+              type="button"
+              className={pageBtnClass}
+              disabled={loading || safePage >= pages}
+              onClick={() => onPageChange?.(safePage + 1)}
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
 
       {viewReceiptId && (
         <Modal title="Receipt" onClose={() => setViewReceiptId(null)} maxWidth="max-w-2xl">

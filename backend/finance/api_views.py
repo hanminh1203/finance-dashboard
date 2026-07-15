@@ -130,11 +130,29 @@ def logout(request: HttpRequest) -> JsonResponse:
     return JsonResponse({'ok': True})
 
 
+def _parse_positive_int(value: str | None, name: str) -> int | None:
+    if value is None or value == '':
+        return None
+    try:
+        n = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f'{name} must be an integer') from exc
+    if n < 1:
+        raise ValueError(f'{name} must be >= 1')
+    return n
+
+
 @require_http_methods(['GET', 'POST'])
 @require_auth
 def transactions(request: HttpRequest) -> JsonResponse:
     if request.method == 'GET':
-        return JsonResponse(get_transaction_data())
+        try:
+            page = _parse_positive_int(request.GET.get('page'), 'page')
+            source = (request.GET.get('source') or '').strip() or None
+            data = get_transaction_data(page=page, source=source)
+        except ValueError as exc:
+            return json_error(str(exc))
+        return JsonResponse(data)
 
     try:
         body = parse_json(request)

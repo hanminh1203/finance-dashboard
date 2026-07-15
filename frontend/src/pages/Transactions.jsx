@@ -1,22 +1,49 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Card from '../components/Card';
 import Modal from '../components/Modal';
 import TransactionList from '../components/TransactionList';
 import AddTransactionForm from '../components/AddTransactionForm';
 import TransferForm from '../components/TransferForm';
 import ReceiptForm from '../components/ReceiptForm';
-import { compareTransactionsDesc } from '../lib/transform';
+import { getTransactionData } from '../lib/api';
+import { normalizeRows } from '../lib/transform';
 
 const buttonClass =
   'px-3 py-2 rounded-lg text-sm font-medium bg-bg-raised border border-bg-border text-text-primary hover:border-accent cursor-pointer transition-colors';
 
-export default function Transactions({ transactions, metadata, balances, onSaved }) {
+export default function Transactions({ metadata, balances, onSaved, listVersion }) {
   const [modal, setModal] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(0);
+  const [rows, setRows] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const sorted = useMemo(
-    () => transactions.slice().sort(compareTransactionsDesc),
-    [transactions],
-  );
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await getTransactionData({ page });
+        if (cancelled) return;
+        setRows(normalizeRows(data.rows, metadata.categories, { sort: false }));
+        setPageSize(data.pageSize);
+        setTotal(data.total);
+        setTotalPages(data.totalPages);
+        if (data.page !== page) setPage(data.page);
+      } catch (err) {
+        if (!cancelled) setError(err.message || String(err));
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [page, listVersion, metadata.categories]);
 
   function closeModal() {
     setModal(null);
@@ -37,7 +64,16 @@ export default function Transactions({ transactions, metadata, balances, onSaved
       </div>
 
       <Card title="All Transactions">
-        <TransactionList transactions={sorted} />
+        {error && <div className="mb-3 text-sm text-expense">{error}</div>}
+        <TransactionList
+          transactions={rows}
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          loading={loading}
+        />
       </Card>
 
       {modal === 'add' && (

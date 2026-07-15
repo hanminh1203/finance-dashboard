@@ -54,8 +54,12 @@ export function logout() {
   return api('/auth/logout', { method: 'POST' });
 }
 
-export function getTransactionData() {
-  return api('/transactions');
+export function getTransactionData({ page, source } = {}) {
+  const params = new URLSearchParams();
+  if (page != null) params.set('page', String(page));
+  if (source) params.set('source', source);
+  const qs = params.toString();
+  return api(`/transactions${qs ? `?${qs}` : ''}`);
 }
 
 export function getMetadata() {
