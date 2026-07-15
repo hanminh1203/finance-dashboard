@@ -37,8 +37,11 @@ export function formatAUD(n) {
 }
 
 export function formatDateShort(date) {
-  if (!date) return '';
-  return date.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+  const d = date instanceof Date ? date : parseDate(date);
+  if (!d) return '';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${d.getFullYear()}`;
 }
 
 /**

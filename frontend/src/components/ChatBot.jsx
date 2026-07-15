@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import Card from './Card';
 import { inputClass } from './FormField';
 import { parseFinanceMessage, addTransaction, addTransfer } from '../lib/api';
-import { formatAUD } from '../lib/transform';
+import { formatAUD, formatDateShort } from '../lib/transform';
 
 const WELCOME = 'Tell me about a transaction or transfer — e.g. "Spent $45 on groceries at Woolworths from Commonwealth today" or "Transfer $200 from Commonwealth to ING Savings".';
 
@@ -41,7 +41,7 @@ export default function ChatBot({ metadata, onSaved }) {
             role: 'assistant',
             text: `✅ Added ${type.toLowerCase()} of ${formatAUD(Math.abs(amount))} — "${source}" / ${subCategory}${
               comment ? ` ("${comment}")` : ''
-            } on ${date}.`,
+            } on ${formatDateShort(date)}.`,
           },
         ]);
       } else if (parsed.action === 'transfer') {
@@ -55,7 +55,7 @@ export default function ChatBot({ metadata, onSaved }) {
           ...m,
           {
             role: 'assistant',
-            text: `✅ Transferred ${formatAUD(amount)} from "${fromSource}" to "${toSource}" on ${date} (2 linked transactions recorded).`,
+            text: `✅ Transferred ${formatAUD(amount)} from "${fromSource}" to "${toSource}" on ${formatDateShort(date)} (2 linked transactions recorded).`,
           },
         ]);
       } else {
