@@ -65,6 +65,14 @@ export default function ReceiptForm({ metadata, onSaved }) {
     e.target.value = '';
     if (!file) return;
 
+    // Clear previous entry so stale fields are not visible while OCR runs.
+    setStore('');
+    setDate(todayISO());
+    setSubCategory('');
+    setComment('');
+    setSources([emptySource()]);
+    setItems([emptyItem()]);
+    setPreviewUrl(null);
     setExtracting(true);
     setStatus(null);
     try {
@@ -148,7 +156,7 @@ export default function ReceiptForm({ metadata, onSaved }) {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,.heic,.heif,image/heic,image/heif"
               capture="environment"
               className="hidden"
               onChange={handleImageSelected}
