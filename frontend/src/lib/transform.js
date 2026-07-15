@@ -114,6 +114,11 @@ export function categoryBreakdown(transactions, monthFilter = 'all') {
     .sort((a, b) => b.amount - a.amount);
 }
 
+/** Newest date first; later sheet rows first when dates match. */
+export function compareTransactionsDesc(a, b) {
+  return (b.date - a.date) || (b.row - a.row);
+}
+
 export function transactionsBySource(transactions, source) {
-  return transactions.filter((t) => t.source === source).slice().sort((a, b) => b.date - a.date);
+  return transactions.filter((t) => t.source === source).slice().sort(compareTransactionsDesc);
 }

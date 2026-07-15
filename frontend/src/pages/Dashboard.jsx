@@ -5,7 +5,7 @@ import NetWorthChart from '../components/NetWorthChart';
 import IncomeExpenseChart from '../components/IncomeExpenseChart';
 import CategoryDoughnut from '../components/CategoryDoughnut';
 import TransactionList from '../components/TransactionList';
-import { currentBalances, netWorthTrend, categoryBreakdown } from '../lib/transform';
+import { currentBalances, netWorthTrend, categoryBreakdown, compareTransactionsDesc } from '../lib/transform';
 
 export default function Dashboard({ transactions, monthlySummary }) {
   const [monthFilter, setMonthFilter] = useState('all');
@@ -14,7 +14,10 @@ export default function Dashboard({ transactions, monthlySummary }) {
   const netWorth = useMemo(() => Object.values(balances).reduce((s, b) => s + b, 0), [balances]);
   const trend = useMemo(() => netWorthTrend(transactions), [transactions]);
   const breakdown = useMemo(() => categoryBreakdown(transactions, monthFilter), [transactions, monthFilter]);
-  const recent = useMemo(() => transactions.slice().sort((a, b) => b.date - a.date).slice(0, 8), [transactions]);
+  const recent = useMemo(
+    () => transactions.slice().sort(compareTransactionsDesc).slice(0, 8),
+    [transactions],
+  );
 
   const latestMonth = monthlySummary[monthlySummary.length - 1];
 

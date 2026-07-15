@@ -18,6 +18,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from . import oauth
+from .db_sync import SyncError, compare_mirror, sync_from_sheets
 from .groq_client import GroqError, extract_receipt_from_image, parse_finance_message
 from .sheets_client import SheetsClient, SheetsError
 
@@ -289,6 +290,32 @@ def health(request: HttpRequest) -> JsonResponse:
         },
         status=200 if all_ok else 503,
     )
+
+
+@require_GET
+@require_auth
+def management_status(request: HttpRequest) -> JsonResponse:
+    try:
+        result = compare_mirror(sheets_for(request))
+    except SyncError as exc:
+        return json_error(str(exc))
+    except SheetsError as exc:
+        status = getattr(exc, 'status', None) or 502
+        return json_error(str(exc), status=status)
+    return JsonResponse(result)
+
+
+@require_POST
+@require_auth
+def management_sync(request: HttpRequest) -> JsonResponse:
+    try:
+        result = sync_from_sheets(sheets_for(request))
+    except SyncError as exc:
+        return json_error(str(exc))
+    except SheetsError as exc:
+        status = getattr(exc, 'status', None) or 502
+        return json_error(str(exc), status=status)
+    return JsonResponse(result)
 
 
 @require_http_methods(['POST'])

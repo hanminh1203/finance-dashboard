@@ -15,4 +15,6 @@ urlpatterns = [
     path('assistant/parse', api_views.assistant_parse, name='assistant_parse'),
     path('receipts/ocr', api_views.receipt_ocr, name='receipt_ocr'),
     path('health', api_views.health, name='health'),
+    path('management/status', api_views.management_status, name='management_status'),
+    path('management/sync', api_views.management_sync, name='management_sync'),
 ]

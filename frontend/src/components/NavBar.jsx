@@ -6,6 +6,7 @@ const TABS = [
   { id: 'transfer', label: 'Transfer' },
   { id: 'chat', label: 'Assistant' },
   { id: 'health', label: 'Health' },
+  { id: 'management', label: 'Management' },
 ];
 
 export default function NavBar({ active, onChange, onRefresh, refreshing, onSignOut }) {

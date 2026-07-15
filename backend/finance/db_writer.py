@@ -23,8 +23,18 @@ def _parse_date(value: Any) -> date:
     text = str(value or '').strip()
     if not text:
         raise ValueError('Date is required')
-    # ISO date or datetime
-    return date.fromisoformat(text[:10])
+    # ISO date or datetime (forms / API)
+    try:
+        return date.fromisoformat(text[:10])
+    except ValueError:
+        pass
+    # Google Sheet display format
+    for fmt in ('%d/%m/%Y', '%d/%m/%y'):
+        try:
+            return datetime.strptime(text, fmt).date()
+        except ValueError:
+            continue
+    raise ValueError(f'Invalid date: {value!r}')
 
 
 def _dec(value: Any) -> Decimal:

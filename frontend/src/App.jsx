@@ -4,6 +4,7 @@ import SignInScreen from './components/SignInScreen';
 import Dashboard from './pages/Dashboard';
 import Sources from './pages/Sources';
 import Health from './pages/Health';
+import Management from './pages/Management';
 import AddTransactionForm from './components/AddTransactionForm';
 import ReceiptForm from './components/ReceiptForm';
 import TransferForm from './components/TransferForm';
@@ -36,13 +37,14 @@ export default function App() {
           </div>
         )}
 
-        {loading && transactions.length === 0 && tab !== 'health' ? (
+        {loading && transactions.length === 0 && tab !== 'health' && tab !== 'management' ? (
           <LoadingState />
         ) : (
           <>
             {tab === 'dashboard' && <Dashboard transactions={transactions} monthlySummary={monthlySummary} />}
             {tab === 'sources' && <Sources transactions={transactions} metadata={metadata} />}
             {tab === 'health' && <Health />}
+            {tab === 'management' && <Management />}
             {tab === 'add' && (
               <div className="flex justify-center">
                 <AddTransactionForm metadata={metadata} onSaved={refresh} />

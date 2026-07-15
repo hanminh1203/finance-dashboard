@@ -256,6 +256,36 @@ class SheetsClient:
 
         return {'sources': sources, 'categories': categories}
 
+    @staticmethod
+    def _rows_as_dicts(table: dict, values: list[list]) -> list[dict]:
+        headers = [c['name'] for c in table['columns']]
+        rows: list[dict] = []
+        for row in values:
+            if not row or all(c == '' or c is None for c in row):
+                continue
+            rows.append(
+                {h: (row[idx] if idx < len(row) else None) for idx, h in enumerate(headers)}
+            )
+        return rows
+
+    def get_mirror_source_rows(self) -> dict[str, list[dict]]:
+        """Read Transactions, Receipt, and Receipt_Items tables as list-of-dicts."""
+        tx_table = self.get_table(settings.TRANSACTIONS_TABLE)
+        receipt_table = self.get_table(settings.RECEIPT_TABLE)
+        items_table = self.get_table(settings.RECEIPT_ITEMS_TABLE)
+        tx_vals, receipt_vals, item_vals = self.batch_get_values(
+            [
+                self.data_range_a1(tx_table),
+                self.data_range_a1(receipt_table),
+                self.data_range_a1(items_table),
+            ]
+        )
+        return {
+            'transactions': self._rows_as_dicts(tx_table, tx_vals),
+            'receipts': self._rows_as_dicts(receipt_table, receipt_vals),
+            'receipt_items': self._rows_as_dicts(items_table, item_vals),
+        }
+
     def append_rows(self, table_name: str, column_names: list[str], rows: list[list]) -> None:
         if not rows:
             return

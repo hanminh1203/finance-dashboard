@@ -112,3 +112,11 @@ export async function fetchHealth() {
   }
   return data;
 }
+
+export function fetchManagementStatus() {
+  return api('/management/status');
+}
+
+export function syncManagement() {
+  return api('/management/sync', { method: 'POST' });
+}
