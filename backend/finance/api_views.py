@@ -215,6 +215,16 @@ def create_receipt(request: HttpRequest) -> JsonResponse:
     return JsonResponse(result)
 
 
+@require_GET
+@require_auth
+def get_receipt(request: HttpRequest, receipt_id: str) -> JsonResponse:
+    try:
+        data = sheets_for(request).get_receipt(receipt_id)
+    except SheetsError as exc:
+        return json_error(str(exc), status=exc.status or 502)
+    return JsonResponse(data)
+
+
 @require_http_methods(['POST'])
 @require_auth
 def assistant_parse(request: HttpRequest) -> JsonResponse:

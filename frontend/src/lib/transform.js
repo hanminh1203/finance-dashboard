@@ -55,6 +55,7 @@ export function normalizeRows(rows) {
       subCategory: String(r['Sub category'] || r['Sub Category'] || '').trim(),
       mainCategory: String(r['Main Category'] || '').trim(),
       type: String(r['Type'] || '').trim(),
+      receiptId: String(r['Receipt ID'] || r.receiptId || '').trim() || null,
     }))
     .filter((r) => r.date && r.source)
     .sort((a, b) => a.date - b.date);

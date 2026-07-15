@@ -10,6 +10,7 @@ import requests
 from django.conf import settings
 
 from finance import db_writer
+from finance.db_writer import _parse_date
 
 BASE = 'https://sheets.googleapis.com/v4/spreadsheets'
 
@@ -58,6 +59,44 @@ def quote_sheet_title(title: str) -> str:
     if re.match(r'^[A-Za-z0-9_]+$', title):
         return title
     return "'" + title.replace("'", "''") + "'"
+
+
+def _row_cell(row: dict, *names: str) -> Any:
+    lower = {str(k).strip().lower(): v for k, v in row.items()}
+    for name in names:
+        if name.lower() in lower:
+            return lower[name.lower()]
+    return None
+
+
+def _fingerprint_change(val: Any) -> str:
+    return f'{parse_amount(val):.2f}'
+
+
+def _tx_fingerprint(row: dict) -> tuple[str, str, str, str] | None:
+    """Match key for linking Computed_Transactions ↔ raw Transactions."""
+    try:
+        d = _parse_date(_row_cell(row, 'Date'))
+    except ValueError:
+        return None
+    source = str(_row_cell(row, 'Source') or '').strip()
+    if not source:
+        return None
+    return (
+        d.isoformat(),
+        _fingerprint_change(_row_cell(row, 'Change')),
+        source,
+        str(_row_cell(row, 'Comment') or ''),
+    )
+
+
+def _parse_store_comment(comment_text: str) -> tuple[str, str]:
+    """Split write convention '{store} : {comment}'."""
+    text = str(comment_text or '')
+    if ' : ' in text:
+        store, comment = text.split(' : ', 1)
+        return store.strip(), comment
+    return text.strip(), ''
 
 
 class SheetsClient:
@@ -166,18 +205,107 @@ class SheetsClient:
         return -1
 
     def get_transaction_data(self) -> dict:
-        table = self.get_table(settings.COMPUTED_TRANSACTIONS_TABLE)
-        values = self.get_values(self.data_range_a1(table))
-        headers = [c['name'] for c in table['columns']]
-        header_start_row = table['range']['startRowIndex'] + 2
+        computed = self.get_table(settings.COMPUTED_TRANSACTIONS_TABLE)
+        tx_table = self.get_table(settings.TRANSACTIONS_TABLE)
+        computed_vals, tx_vals = self.batch_get_values(
+            [self.data_range_a1(computed), self.data_range_a1(tx_table)]
+        )
+        headers = [c['name'] for c in computed['columns']]
+        header_start_row = computed['range']['startRowIndex'] + 2
+
+        receipt_by_fp: dict[tuple[str, str, str, str], str] = {}
+        for raw in self._rows_as_dicts(tx_table, tx_vals):
+            rid = str(_row_cell(raw, 'Receipt ID') or '').strip()
+            if not rid:
+                continue
+            fp = _tx_fingerprint(raw)
+            if fp:
+                receipt_by_fp[fp] = rid
+
         rows = []
-        for i, row in enumerate(values):
+        for i, row in enumerate(computed_vals):
             if not row or all(c == '' or c is None for c in row):
                 continue
             obj = {h: (row[idx] if idx < len(row) else None) for idx, h in enumerate(headers)}
             obj['__row'] = header_start_row + i
+            existing = str(_row_cell(obj, 'Receipt ID') or '').strip()
+            if existing:
+                obj['Receipt ID'] = existing
+            else:
+                fp = _tx_fingerprint(obj)
+                obj['Receipt ID'] = receipt_by_fp.get(fp) if fp else None
             rows.append(obj)
         return {'headers': headers, 'rows': rows}
+
+    def get_receipt(self, receipt_id: str) -> dict:
+        rid = str(receipt_id or '').strip()
+        if not rid:
+            raise SheetsError('Receipt ID is required', status=400)
+
+        mirror = self.get_mirror_source_rows()
+        receipt_row = next(
+            (
+                r
+                for r in mirror['receipts']
+                if str(_row_cell(r, 'Receipt ID') or '').strip() == rid
+            ),
+            None,
+        )
+        if not receipt_row:
+            raise SheetsError('Receipt not found', status=404)
+
+        try:
+            date_iso = _parse_date(_row_cell(receipt_row, 'Date')).isoformat()
+        except ValueError as exc:
+            raise SheetsError(str(exc), status=400) from exc
+        total = parse_amount(_row_cell(receipt_row, 'Total'))
+
+        items = []
+        for r in mirror['receipt_items']:
+            if str(_row_cell(r, 'Receipt ID') or '').strip() != rid:
+                continue
+            items.append(
+                {
+                    'name': str(_row_cell(r, 'Name') or '').strip(),
+                    'amount': parse_amount(_row_cell(r, 'Amount')),
+                    'unit': str(_row_cell(r, 'Unit') or '').strip(),
+                    'money': parse_amount(_row_cell(r, 'Money')),
+                }
+            )
+
+        sources = []
+        store = ''
+        comment = ''
+        sub_category = ''
+        for r in mirror['transactions']:
+            if str(_row_cell(r, 'Receipt ID') or '').strip() != rid:
+                continue
+            change = parse_amount(_row_cell(r, 'Change'))
+            sources.append(
+                {
+                    'source': str(_row_cell(r, 'Source') or '').strip(),
+                    'amount': abs(change),
+                }
+            )
+            if not sub_category:
+                sub_category = str(
+                    _row_cell(r, 'Sub category', 'Sub Category') or ''
+                ).strip()
+            if not store and not comment:
+                store, comment = _parse_store_comment(
+                    str(_row_cell(r, 'Comment') or '')
+                )
+
+        return {
+            'receiptId': rid,
+            'date': date_iso,
+            'store': store,
+            'subCategory': sub_category,
+            'comment': comment,
+            'total': total,
+            'sources': sources,
+            'items': items,
+        }
 
     def get_income_expense_by_month(self) -> list[dict]:
         table = self.get_table(settings.INCOME_EXPENSE_TABLE)

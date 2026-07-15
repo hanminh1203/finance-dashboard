@@ -78,6 +78,10 @@ export function addReceipt(payload) {
   return api('/receipts', { method: 'POST', body: payload });
 }
 
+export function getReceipt(id) {
+  return api(`/receipts/${encodeURIComponent(id)}`);
+}
+
 export function parseFinanceMessage({ message, metadata }) {
   return api('/assistant/parse', { method: 'POST', body: { message, metadata } });
 }
