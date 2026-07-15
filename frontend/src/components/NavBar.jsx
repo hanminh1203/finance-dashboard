@@ -1,9 +1,7 @@
 const TABS = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'sources', label: 'Sources' },
-  { id: 'add', label: 'Add Transaction' },
-  { id: 'receipt', label: 'Receipt' },
-  { id: 'transfer', label: 'Transfer' },
+  { id: 'transactions', label: 'Transactions' },
   { id: 'chat', label: 'Assistant' },
   { id: 'health', label: 'Health' },
   { id: 'management', label: 'Management' },

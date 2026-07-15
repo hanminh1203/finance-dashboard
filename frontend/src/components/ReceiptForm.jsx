@@ -1,5 +1,4 @@
 import { useMemo, useRef, useState } from 'react';
-import Card from './Card';
 import { Field, inputClass, selectClass } from './FormField';
 import { addReceipt, extractReceiptFromImage } from '../lib/api';
 import { fileToDataUrl } from '../lib/imageUtils';
@@ -11,7 +10,14 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 const emptySource = () => ({ source: '', amount: '' });
 const emptyItem = () => ({ name: '', amount: '', unit: 'piece', money: '' });
 
-export default function ReceiptForm({ metadata, onSaved }) {
+const cancelClass =
+  'px-3 py-2.5 rounded-lg border border-bg-border bg-bg-raised text-text-secondary hover:text-text-primary font-medium transition-colors cursor-pointer';
+const submitClass =
+  'px-3 py-2.5 rounded-lg border border-bg-border bg-bg-raised text-text-primary hover:border-accent disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors cursor-pointer';
+const primaryClass =
+  'px-3 py-2.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors cursor-pointer';
+
+export default function ReceiptForm({ metadata, onSaved, onClose }) {
   const [store, setStore] = useState('');
   const [date, setDate] = useState(todayISO());
   const [subCategory, setSubCategory] = useState('');
@@ -23,6 +29,7 @@ export default function ReceiptForm({ metadata, onSaved }) {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [status, setStatus] = useState(null);
   const fileInputRef = useRef(null);
+  const closeAfterRef = useRef(false);
 
   const expenseCategories = useMemo(
     () => metadata.categories.filter((c) => c.type === 'Expense'),
@@ -60,12 +67,7 @@ export default function ReceiptForm({ metadata, onSaved }) {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
   }
 
-  async function handleImageSelected(e) {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    // Clear previous entry so stale fields are not visible while OCR runs.
+  function resetForm() {
     setStore('');
     setDate(todayISO());
     setSubCategory('');
@@ -73,6 +75,15 @@ export default function ReceiptForm({ metadata, onSaved }) {
     setSources([emptySource()]);
     setItems([emptyItem()]);
     setPreviewUrl(null);
+  }
+
+  async function handleImageSelected(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    // Clear previous entry so stale fields are not visible while OCR runs.
+    resetForm();
     setExtracting(true);
     setStatus(null);
     try {
@@ -105,6 +116,8 @@ export default function ReceiptForm({ metadata, onSaved }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!canSubmit) return;
+    const shouldClose = closeAfterRef.current;
+    closeAfterRef.current = false;
     setSubmitting(true);
     setStatus(null);
     try {
@@ -120,13 +133,12 @@ export default function ReceiptForm({ metadata, onSaved }) {
         ok: true,
         msg: `Receipt saved (${result.items} items, ${result.transactions} payment${result.transactions === 1 ? '' : 's'}).`,
       });
-      setStore('');
-      setComment('');
-      setSubCategory('');
-      setSources([emptySource()]);
-      setItems([emptyItem()]);
-      setPreviewUrl(null);
       onSaved?.();
+      if (shouldClose) {
+        onClose?.();
+      } else {
+        resetForm();
+      }
     } catch (err) {
       setStatus({ ok: false, msg: err.message || String(err) });
     } finally {
@@ -135,8 +147,7 @@ export default function ReceiptForm({ metadata, onSaved }) {
   }
 
   return (
-    <Card title="Add Receipt" className="max-w-2xl w-full">
-      <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-5">
         <div className="rounded-lg border border-dashed border-bg-border bg-bg-raised/40 p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -372,18 +383,31 @@ export default function ReceiptForm({ metadata, onSaved }) {
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="w-full py-2.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors cursor-pointer"
-        >
-          {submitting ? 'Saving…' : 'Save Receipt'}
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+          <button type="button" onClick={() => onClose?.()} className={cancelClass}>
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            onClick={() => { closeAfterRef.current = false; }}
+            className={submitClass}
+          >
+            {submitting ? 'Saving…' : 'Submit'}
+          </button>
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            onClick={() => { closeAfterRef.current = true; }}
+            className={primaryClass}
+          >
+            {submitting ? 'Saving…' : 'Submit and Close'}
+          </button>
+        </div>
 
         {status && (
           <p className={`text-sm ${status.ok ? 'text-income' : 'text-expense'}`}>{status.msg}</p>
         )}
-      </form>
-    </Card>
+    </form>
   );
 }

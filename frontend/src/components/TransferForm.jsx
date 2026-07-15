@@ -1,12 +1,18 @@
-import { useState } from 'react';
-import Card from './Card';
+import { useRef, useState } from 'react';
 import { Field, inputClass, selectClass } from './FormField';
 import { addTransfer } from '../lib/api';
 import { formatAUD } from '../lib/transform';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-export default function TransferForm({ metadata, balances, onSaved }) {
+const cancelClass =
+  'px-3 py-2.5 rounded-lg border border-bg-border bg-bg-raised text-text-secondary hover:text-text-primary font-medium transition-colors cursor-pointer';
+const submitClass =
+  'px-3 py-2.5 rounded-lg border border-bg-border bg-bg-raised text-text-primary hover:border-accent disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors cursor-pointer';
+const primaryClass =
+  'px-3 py-2.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors cursor-pointer';
+
+export default function TransferForm({ metadata, balances, onSaved, onClose }) {
   const [date, setDate] = useState(todayISO());
   const [amount, setAmount] = useState('');
   const [fromSource, setFromSource] = useState('');
@@ -14,20 +20,34 @@ export default function TransferForm({ metadata, balances, onSaved }) {
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [status, setStatus] = useState(null);
+  const closeAfterRef = useRef(false);
 
   const canSubmit = amount && fromSource && toSource && fromSource !== toSource && !submitting;
+
+  function resetForm() {
+    setDate(todayISO());
+    setAmount('');
+    setFromSource('');
+    setToSource('');
+    setComment('');
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!canSubmit) return;
+    const shouldClose = closeAfterRef.current;
+    closeAfterRef.current = false;
     setSubmitting(true);
     setStatus(null);
     try {
       await addTransfer({ date, amount, fromSource, toSource, comment });
       setStatus({ ok: true, msg: 'Transfer recorded (2 linked transactions).' });
-      setAmount('');
-      setComment('');
       onSaved?.();
+      if (shouldClose) {
+        onClose?.();
+      } else {
+        resetForm();
+      }
     } catch (err) {
       setStatus({ ok: false, msg: err.message || String(err) });
     } finally {
@@ -36,72 +56,85 @@ export default function TransferForm({ metadata, balances, onSaved }) {
   }
 
   return (
-    <Card title="Transfer Between Sources" className="max-w-lg">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="From">
-            <select value={fromSource} onChange={(e) => setFromSource(e.target.value)} className={selectClass} required>
-              <option value="" disabled>Select source</option>
-              {metadata.sources.map((s) => (
-                <option key={s.name} value={s.name}>{s.name}</option>
-              ))}
-            </select>
-            {fromSource && (
-              <p className="text-xs text-text-muted mt-1">Balance: {formatAUD(balances[fromSource] || 0)}</p>
-            )}
-          </Field>
-          <Field label="To">
-            <select value={toSource} onChange={(e) => setToSource(e.target.value)} className={selectClass} required>
-              <option value="" disabled>Select source</option>
-              {metadata.sources.filter((s) => s.name !== fromSource).map((s) => (
-                <option key={s.name} value={s.name}>{s.name}</option>
-              ))}
-            </select>
-          </Field>
-        </div>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="From">
+          <select value={fromSource} onChange={(e) => setFromSource(e.target.value)} className={selectClass} required>
+            <option value="" disabled>Select source</option>
+            {metadata.sources.map((s) => (
+              <option key={s.name} value={s.name}>{s.name}</option>
+            ))}
+          </select>
+          {fromSource && (
+            <p className="text-xs text-text-muted mt-1">Balance: {formatAUD(balances[fromSource] || 0)}</p>
+          )}
+        </Field>
+        <Field label="To">
+          <select value={toSource} onChange={(e) => setToSource(e.target.value)} className={selectClass} required>
+            <option value="" disabled>Select source</option>
+            {metadata.sources.filter((s) => s.name !== fromSource).map((s) => (
+              <option key={s.name} value={s.name}>{s.name}</option>
+            ))}
+          </select>
+        </Field>
+      </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Date">
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} required />
-          </Field>
-          <Field label="Amount (AUD)">
-            <input
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className={inputClass}
-              required
-            />
-          </Field>
-        </div>
-
-        <Field label="Comment (optional)">
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Date">
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} required />
+        </Field>
+        <Field label="Amount (AUD)">
           <input
-            type="text"
-            placeholder="e.g. Move to savings"
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
+            type="number"
+            inputMode="decimal"
+            step="0.01"
+            min="0"
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
             className={inputClass}
+            required
           />
         </Field>
+      </div>
 
+      <Field label="Comment (optional)">
+        <input
+          type="text"
+          placeholder="e.g. Move to savings"
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
+          className={inputClass}
+        />
+      </Field>
+
+      {fromSource && fromSource === toSource && (
+        <p className="text-sm text-expense">Source and destination must differ.</p>
+      )}
+
+      <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+        <button type="button" onClick={() => onClose?.()} className={cancelClass}>
+          Cancel
+        </button>
         <button
           type="submit"
           disabled={!canSubmit}
-          className="w-full py-2.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors cursor-pointer"
+          onClick={() => { closeAfterRef.current = false; }}
+          className={submitClass}
         >
-          {submitting ? 'Saving…' : 'Transfer'}
+          {submitting ? 'Saving…' : 'Submit'}
         </button>
+        <button
+          type="submit"
+          disabled={!canSubmit}
+          onClick={() => { closeAfterRef.current = true; }}
+          className={primaryClass}
+        >
+          {submitting ? 'Saving…' : 'Submit and Close'}
+        </button>
+      </div>
 
-        {fromSource && fromSource === toSource && (
-          <p className="text-sm text-expense">Source and destination must differ.</p>
-        )}
-        {status && <p className={`text-sm ${status.ok ? 'text-income' : 'text-expense'}`}>{status.msg}</p>}
-      </form>
-    </Card>
+      {status && <p className={`text-sm ${status.ok ? 'text-income' : 'text-expense'}`}>{status.msg}</p>}
+    </form>
   );
 }

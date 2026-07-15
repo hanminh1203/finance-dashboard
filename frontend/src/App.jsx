@@ -5,9 +5,7 @@ import Dashboard from './pages/Dashboard';
 import Sources from './pages/Sources';
 import Health from './pages/Health';
 import Management from './pages/Management';
-import AddTransactionForm from './components/AddTransactionForm';
-import ReceiptForm from './components/ReceiptForm';
-import TransferForm from './components/TransferForm';
+import Transactions from './pages/Transactions';
 import { useAuth } from './hooks/useAuth';
 import { useFinanceData } from './hooks/useFinanceData';
 import { currentBalances } from './lib/transform';
@@ -43,23 +41,16 @@ export default function App() {
           <>
             {tab === 'dashboard' && <Dashboard transactions={transactions} monthlySummary={monthlySummary} />}
             {tab === 'sources' && <Sources transactions={transactions} metadata={metadata} />}
+            {tab === 'transactions' && (
+              <Transactions
+                transactions={transactions}
+                metadata={metadata}
+                balances={balances}
+                onSaved={refresh}
+              />
+            )}
             {tab === 'health' && <Health />}
             {tab === 'management' && <Management />}
-            {tab === 'add' && (
-              <div className="flex justify-center">
-                <AddTransactionForm metadata={metadata} onSaved={refresh} />
-              </div>
-            )}
-            {tab === 'receipt' && (
-              <div className="flex justify-center">
-                <ReceiptForm metadata={metadata} onSaved={refresh} />
-              </div>
-            )}
-            {tab === 'transfer' && (
-              <div className="flex justify-center">
-                <TransferForm metadata={metadata} balances={balances} onSaved={refresh} />
-              </div>
-            )}
             {tab === 'chat' && (
               <ChatBot metadata={metadata} onSaved={refresh} />
             )}
