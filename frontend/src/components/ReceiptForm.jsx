@@ -301,13 +301,13 @@ export default function ReceiptForm({ metadata, onSaved, onClose }) {
               + Add item
             </button>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {items.map((it, i) => (
               <div
                 key={i}
-                className="grid grid-cols-1 sm:grid-cols-[1fr_5rem_5.5rem_6rem_auto] gap-2 items-end p-3 rounded-lg bg-bg-raised/50 border border-bg-border/60"
+                className="grid grid-cols-[1fr_5rem_5.5rem_6rem_auto] gap-2 items-end"
               >
-                <Field label="Name">
+                <Field label={i === 0 ? 'Name' : undefined}>
                   <input
                     type="text"
                     placeholder="Item name"
@@ -317,7 +317,7 @@ export default function ReceiptForm({ metadata, onSaved, onClose }) {
                     required
                   />
                 </Field>
-                <Field label="Amount">
+                <Field label={i === 0 ? 'Amount' : undefined}>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -329,7 +329,7 @@ export default function ReceiptForm({ metadata, onSaved, onClose }) {
                     className={inputClass}
                   />
                 </Field>
-                <Field label="Unit">
+                <Field label={i === 0 ? 'Unit' : undefined}>
                   <select
                     value={it.unit}
                     onChange={(e) => updateItem(i, { unit: e.target.value })}
@@ -343,7 +343,7 @@ export default function ReceiptForm({ metadata, onSaved, onClose }) {
                     ))}
                   </select>
                 </Field>
-                <Field label="Money">
+                <Field label={i === 0 ? 'Money' : undefined}>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -361,7 +361,7 @@ export default function ReceiptForm({ metadata, onSaved, onClose }) {
                   disabled={items.length === 1}
                   onClick={() => setItems((prev) => prev.filter((_, j) => j !== i))}
                   aria-label="Remove item"
-                  className="sm:mb-0.5 p-2.5 rounded-lg text-text-muted hover:text-expense hover:bg-expense/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer justify-self-end"
+                  className="mb-0.5 p-2.5 rounded-lg text-text-muted hover:text-expense hover:bg-expense/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                 >
                   ✕
                 </button>

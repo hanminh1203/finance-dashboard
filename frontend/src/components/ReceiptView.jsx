@@ -107,25 +107,25 @@ export default function ReceiptView({ receiptId, onClose }) {
 
       <section className="space-y-3">
         <h4 className="text-sm font-medium text-text-secondary">Items</h4>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {(data.items || []).length === 0 ? (
             <p className="text-sm text-text-muted">No items</p>
           ) : (
             data.items.map((it, i) => (
               <div
                 key={i}
-                className="grid grid-cols-1 sm:grid-cols-[1fr_5rem_5.5rem_6rem] gap-2 items-end p-3 rounded-lg bg-bg-raised/50 border border-bg-border/60"
+                className="grid grid-cols-[1fr_5rem_5.5rem_6rem] gap-2 items-end"
               >
-                <Field label="Name">
+                <Field label={i === 0 ? 'Name' : undefined}>
                   <DisplayValue>{it.name}</DisplayValue>
                 </Field>
-                <Field label="Amount">
+                <Field label={i === 0 ? 'Amount' : undefined}>
                   <DisplayValue>{it.amount != null && it.amount !== '' ? it.amount : '—'}</DisplayValue>
                 </Field>
-                <Field label="Unit">
+                <Field label={i === 0 ? 'Unit' : undefined}>
                   <DisplayValue>{it.unit}</DisplayValue>
                 </Field>
-                <Field label="Money">
+                <Field label={i === 0 ? 'Money' : undefined}>
                   <DisplayValue>{formatAUD(Number(it.money) || 0)}</DisplayValue>
                 </Field>
               </div>
