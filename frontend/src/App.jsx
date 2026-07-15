@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import NavBar from './components/NavBar';
 import SignInScreen from './components/SignInScreen';
 import Dashboard from './pages/Dashboard';
@@ -14,8 +15,9 @@ import ChatBot from './components/ChatBot';
 export default function App() {
   const { signedIn, ready, error: authError, signIn, signOut } = useAuth();
   const { transactions, metadata, monthlySummary, loading, error, refresh, listVersion } = useFinanceData(signedIn);
-  const [tab, setTab] = useState('dashboard');
+  const { pathname } = useLocation();
   const balances = useMemo(() => currentBalances(transactions), [transactions]);
+  const skipLoading = pathname === '/health' || pathname === '/management';
 
   if (!signedIn) {
     return <SignInScreen onSignIn={signIn} error={authError} ready={ready} />;
@@ -23,7 +25,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-bg">
-      <NavBar active={tab} onChange={setTab} onRefresh={refresh} refreshing={loading} onSignOut={signOut} />
+      <NavBar onRefresh={refresh} refreshing={loading} onSignOut={signOut} />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         {error && (
@@ -35,28 +37,36 @@ export default function App() {
           </div>
         )}
 
-        {loading && transactions.length === 0 && tab !== 'health' && tab !== 'management' ? (
+        {loading && transactions.length === 0 && !skipLoading ? (
           <LoadingState />
         ) : (
-          <>
-            {tab === 'dashboard' && <Dashboard transactions={transactions} monthlySummary={monthlySummary} />}
-            {tab === 'sources' && (
-              <Sources transactions={transactions} metadata={metadata} listVersion={listVersion} />
-            )}
-            {tab === 'transactions' && (
-              <Transactions
-                metadata={metadata}
-                balances={balances}
-                onSaved={refresh}
-                listVersion={listVersion}
-              />
-            )}
-            {tab === 'health' && <Health />}
-            {tab === 'management' && <Management />}
-            {tab === 'chat' && (
-              <ChatBot metadata={metadata} onSaved={refresh} />
-            )}
-          </>
+          <Routes>
+            <Route
+              path="/"
+              element={<Dashboard transactions={transactions} monthlySummary={monthlySummary} />}
+            />
+            <Route
+              path="/sources"
+              element={
+                <Sources transactions={transactions} metadata={metadata} listVersion={listVersion} />
+              }
+            />
+            <Route
+              path="/transactions"
+              element={
+                <Transactions
+                  metadata={metadata}
+                  balances={balances}
+                  onSaved={refresh}
+                  listVersion={listVersion}
+                />
+              }
+            />
+            <Route path="/chat" element={<ChatBot metadata={metadata} onSaved={refresh} />} />
+            <Route path="/health" element={<Health />} />
+            <Route path="/management" element={<Management />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         )}
       </main>
     </div>
