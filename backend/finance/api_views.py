@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import json
 import secrets
+import time
+from datetime import datetime, timezone
 from functools import wraps
 from typing import Callable
 from urllib.parse import urlencode
 
 from django.conf import settings
+from django.db import connection, OperationalError
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.middleware.csrf import get_token
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -229,6 +232,63 @@ def assistant_parse(request: HttpRequest) -> JsonResponse:
         status = getattr(exc, 'status', None) or 502
         return json_error(str(exc), status=status)
     return JsonResponse(result)
+
+
+def _check_database() -> dict:
+    start = time.monotonic()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT 1')
+            cursor.fetchone()
+    except OperationalError as exc:
+        return {
+            'ok': False,
+            'latency_ms': round((time.monotonic() - start) * 1000),
+            'message': str(exc),
+        }
+    return {
+        'ok': True,
+        'latency_ms': round((time.monotonic() - start) * 1000),
+        'message': 'Connected to PostgreSQL',
+    }
+
+
+def _check_google_sheet(client: SheetsClient) -> dict:
+    start = time.monotonic()
+    try:
+        info = client.check_connection()
+    except SheetsError as exc:
+        return {
+            'ok': False,
+            'latency_ms': round((time.monotonic() - start) * 1000),
+            'message': str(exc),
+        }
+    return {
+        'ok': True,
+        'latency_ms': round((time.monotonic() - start) * 1000),
+        'message': 'Connected to Google Sheet',
+        'title': info.get('title'),
+        'spreadsheet_id': info.get('spreadsheet_id'),
+    }
+
+
+@require_GET
+@require_auth
+def health(request: HttpRequest) -> JsonResponse:
+    db_check = _check_database()
+    sheet_check = _check_google_sheet(sheets_for(request))
+    all_ok = db_check['ok'] and sheet_check['ok']
+    return JsonResponse(
+        {
+            'status': 'ok' if all_ok else 'degraded',
+            'checks': {
+                'database': db_check,
+                'google_sheet': sheet_check,
+            },
+            'checked_at': datetime.now(timezone.utc).isoformat(),
+        },
+        status=200 if all_ok else 503,
+    )
 
 
 @require_http_methods(['POST'])

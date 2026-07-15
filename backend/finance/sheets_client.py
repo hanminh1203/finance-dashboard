@@ -91,6 +91,15 @@ class SheetsClient:
             return {}
         return res.json()
 
+    def check_connection(self) -> dict:
+        """Lightweight probe — spreadsheet metadata only."""
+        data = self.request('?fields=properties.title,spreadsheetId')
+        props = data.get('properties') or {}
+        return {
+            'spreadsheet_id': data.get('spreadsheetId'),
+            'title': props.get('title'),
+        }
+
     def get_tables(self) -> dict[str, dict]:
         if self._tables_cache is not None:
             return self._tables_cache

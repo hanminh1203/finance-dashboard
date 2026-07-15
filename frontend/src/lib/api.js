@@ -85,3 +85,30 @@ export function parseFinanceMessage({ message, metadata }) {
 export function extractReceiptFromImage({ imageDataUrl, metadata }) {
   return api('/receipts/ocr', { method: 'POST', body: { imageDataUrl, metadata } });
 }
+
+export async function fetchHealth() {
+  const opts = {
+    method: 'GET',
+    credentials: 'include',
+    headers: {},
+  };
+
+  const res = await fetch('/api/health', opts);
+  const text = await res.text();
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = { error: text };
+    }
+  }
+
+  if (!res.ok && res.status !== 503) {
+    const msg = data?.error || `${res.status} ${res.statusText}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}

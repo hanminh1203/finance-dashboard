@@ -14,4 +14,5 @@ urlpatterns = [
     path('receipts', api_views.create_receipt, name='create_receipt'),
     path('assistant/parse', api_views.assistant_parse, name='assistant_parse'),
     path('receipts/ocr', api_views.receipt_ocr, name='receipt_ocr'),
+    path('health', api_views.health, name='health'),
 ]
