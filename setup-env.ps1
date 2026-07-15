@@ -129,7 +129,6 @@ $BackendDefaults = @{
   POSTGRES_USER             = 'finance'
   POSTGRES_PASSWORD         = 'finance'
   TRANSACTIONS_TABLE        = 'Transactions'
-  COMPUTED_TRANSACTIONS_TABLE = 'Computed_Transactions'
   CATEGORY_TABLE            = 'Category'
   SOURCES_TABLE             = 'Sources'
   RECEIPT_TABLE             = 'Receipt'

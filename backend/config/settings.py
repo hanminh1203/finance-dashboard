@@ -100,9 +100,6 @@ GOOGLE_SCOPES = [
 # Google Sheets
 SHEET_ID = os.environ.get('SHEET_ID', '')
 TRANSACTIONS_TABLE = os.environ.get('TRANSACTIONS_TABLE', 'Transactions')
-COMPUTED_TRANSACTIONS_TABLE = os.environ.get(
-    'COMPUTED_TRANSACTIONS_TABLE', 'Computed_Transactions'
-)
 CATEGORY_TABLE = os.environ.get('CATEGORY_TABLE', 'Category')
 SOURCES_TABLE = os.environ.get('SOURCES_TABLE', 'Sources')
 RECEIPT_TABLE = os.environ.get('RECEIPT_TABLE', 'Receipt')
