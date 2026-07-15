@@ -42,21 +42,29 @@ export function formatDateShort(date) {
 }
 
 /**
- * Normalizes raw rows from the Transaction sheet into a consistent shape.
+ * Normalizes raw transaction rows into a consistent shape.
+ * Joins Main Category / Type from metadata categories by sub category.
  */
-export function normalizeRows(rows) {
+export function normalizeRows(rows, categories = []) {
+  const bySub = new Map(
+    (categories || []).map((c) => [String(c.subCategory || '').trim(), c])
+  );
   return rows
-    .map((r) => ({
-      row: r.__row,
-      date: parseDate(r['Date']),
-      change: parseAmount(r['Change']),
-      source: String(r['Source'] || '').trim(),
-      comment: String(r['Comment'] || '').trim(),
-      subCategory: String(r['Sub category'] || r['Sub Category'] || '').trim(),
-      mainCategory: String(r['Main Category'] || '').trim(),
-      type: String(r['Type'] || '').trim(),
-      receiptId: String(r['Receipt ID'] || r.receiptId || '').trim() || null,
-    }))
+    .map((r) => {
+      const subCategory = String(r['Sub category'] || r['Sub Category'] || '').trim();
+      const cat = bySub.get(subCategory);
+      return {
+        row: r.__row,
+        date: parseDate(r['Date']),
+        change: parseAmount(r['Change']),
+        source: String(r['Source'] || '').trim(),
+        comment: String(r['Comment'] || '').trim(),
+        subCategory,
+        mainCategory: String(cat?.mainCategory || r['Main Category'] || '').trim(),
+        type: String(cat?.type || r['Type'] || '').trim(),
+        receiptId: String(r['Receipt ID'] || r.receiptId || '').trim() || null,
+      };
+    })
     .filter((r) => r.date && r.source)
     .sort((a, b) => a.date - b.date);
 }

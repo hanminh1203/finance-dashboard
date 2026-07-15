@@ -19,7 +19,7 @@ export function useFinanceData(signedIn) {
         getMetadata(),
         getIncomeExpenseByMonth(),
       ]);
-      setTransactions(normalizeRows(dataRes.rows));
+      setTransactions(normalizeRows(dataRes.rows, metaRes.categories));
       setMetadata(metaRes);
       setMonthlySummary(monthRes);
     } catch (err) {

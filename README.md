@@ -7,14 +7,14 @@ Browser (React SPA)
    │  session cookie
    ▼
 Django API  ──  Google OAuth (auth code + refresh)
-   │            Google Sheets API v4  (your spreadsheet)
+   │            Google Sheets API v4  (writes + Category/Sources metadata)
    │            Groq (assistant + receipt OCR)
-   │            Postgres (local Docker; mirrors writes)
+   │            Postgres (local Docker; read + dual-write mirror)
    ▼
-Named Sheets Tables (Transactions, Computed_Transactions, …)
+Named Sheets Tables + Postgres (Transactions / Receipt / Receipt_Items)
 ```
 
-The frontend never talks to Sheets or Groq directly. Secrets (`GOOGLE_CLIENT_SECRET`, `GROQ_API_KEY`, sheet ID) stay on the server. **Google Sheets remains the read source of truth**; Postgres dual-writes `Transactions`, `Receipt`, and `Receipt_Items` after successful sheet appends.
+The frontend never talks to Sheets or Groq directly. Secrets (`GOOGLE_CLIENT_SECRET`, `GROQ_API_KEY`, sheet ID) stay on the server. **Postgres is the read source of truth** for `Transactions`, `Receipt`, and `Receipt_Items`. Creates still append to Sheets first, then dual-write into Postgres. Category/Sources metadata and the income-vs-expense chart still come from Sheets.
 
 ## Features
 
@@ -80,11 +80,11 @@ The app expects Google Sheets **Insert → Table** names (configurable via env):
 
 | Table | Role |
 |-------|------|
-| `Transactions` | Write-only appends |
-| `Computed_Transactions` | Dashboard / history reads |
+| `Transactions` | Appends on create (dual-written to Postgres; list reads from Postgres) |
+| `Computed_Transactions` | Legacy computed view (no longer used by the API) |
 | `Income vs Expense by Month` | Monthly chart |
 | `Category` / `Sources` | Dropdown metadata |
-| `Receipt` / `Receipt_Items` | Receipt writes |
+| `Receipt` / `Receipt_Items` | Appends on create (dual-written to Postgres; detail reads from Postgres) |
 
 ## Deploy on Vercel
 
@@ -104,6 +104,7 @@ One project for the whole repo. Root [`vercel.json`](vercel.json) defines two **
 ## Local architecture notes
 
 - Sessions use **signed cookies** (no DB rows required for auth).
-- Postgres (Docker) stores mirrored **Transactions**, **Receipt**, and **Receipt_Items** rows (`id` UUID + `version` on every table; `Receipt.id` equals sheet `Receipt ID`). Sheets schema is unchanged.
+- Postgres (Docker) stores **Transactions**, **Receipt**, and **Receipt_Items** (`id` UUID + `version` on every table; `Receipt.id` equals sheet `Receipt ID`). Dashboard/history and receipt detail read from Postgres; an empty DB needs **Management → Sync** once to load historical sheet data.
+- Creates dual-write: Sheets append first, then Postgres mirror after success.
 - CSRF: `GET /api/auth/me` sets the `csrftoken` cookie; the SPA sends `X-CSRFToken` on mutating requests.
 - Append-only writes — no edit/delete of existing sheet rows.

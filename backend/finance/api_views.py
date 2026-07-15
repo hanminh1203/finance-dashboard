@@ -18,6 +18,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from . import oauth
+from .db_reader import ReaderError, get_receipt as db_get_receipt, get_transaction_data
 from .db_sync import SyncError, compare_mirror, sync_from_sheets
 from .groq_client import GroqError, extract_receipt_from_image, parse_finance_message
 from .sheets_client import SheetsClient, SheetsError
@@ -133,11 +134,7 @@ def logout(request: HttpRequest) -> JsonResponse:
 @require_auth
 def transactions(request: HttpRequest) -> JsonResponse:
     if request.method == 'GET':
-        try:
-            data = sheets_for(request).get_transaction_data()
-        except SheetsError as exc:
-            return json_error(str(exc), status=exc.status or 502)
-        return JsonResponse(data)
+        return JsonResponse(get_transaction_data())
 
     try:
         body = parse_json(request)
@@ -219,9 +216,9 @@ def create_receipt(request: HttpRequest) -> JsonResponse:
 @require_auth
 def get_receipt(request: HttpRequest, receipt_id: str) -> JsonResponse:
     try:
-        data = sheets_for(request).get_receipt(receipt_id)
-    except SheetsError as exc:
-        return json_error(str(exc), status=exc.status or 502)
+        data = db_get_receipt(receipt_id)
+    except ReaderError as exc:
+        return json_error(str(exc), status=exc.status)
     return JsonResponse(data)
 
 
