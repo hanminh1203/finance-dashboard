@@ -37,27 +37,42 @@ export function formatAUD(n) {
 }
 
 export function formatDateShort(date) {
-  if (!date) return '';
-  return date.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+  const d = date instanceof Date ? date : parseDate(date);
+  if (!d) return '';
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  return `${dd}/${mm}/${d.getFullYear()}`;
 }
 
 /**
- * Normalizes raw rows from the Transaction sheet into a consistent shape.
+ * Normalizes raw transaction rows into a consistent shape.
+ * Joins Main Category / Type from metadata categories by sub category.
  */
-export function normalizeRows(rows) {
-  return rows
-    .map((r) => ({
-      row: r.__row,
-      date: parseDate(r['Date']),
-      change: parseAmount(r['Change']),
-      source: String(r['Source'] || '').trim(),
-      comment: String(r['Comment'] || '').trim(),
-      subCategory: String(r['Sub category'] || r['Sub Category'] || '').trim(),
-      mainCategory: String(r['Main Category'] || '').trim(),
-      type: String(r['Type'] || '').trim(),
-    }))
-    .filter((r) => r.date && r.source)
-    .sort((a, b) => a.date - b.date);
+export function normalizeRows(rows, categories = [], { sort = true } = {}) {
+  const bySub = new Map(
+    (categories || []).map((c) => [String(c.subCategory || '').trim(), c])
+  );
+  const mapped = rows
+    .map((r) => {
+      const subCategory = String(r['Sub category'] || r['Sub Category'] || '').trim();
+      const cat = bySub.get(subCategory);
+      return {
+        row: r.__row,
+        date: parseDate(r['Date']),
+        creationDate: parseDate(r['Creation Date'] || r.creationDate),
+        change: parseAmount(r['Change']),
+        source: String(r['Source'] || '').trim(),
+        comment: String(r['Comment'] || '').trim(),
+        subCategory,
+        mainCategory: String(cat?.mainCategory || r['Main Category'] || '').trim(),
+        type: String(cat?.type || r['Type'] || '').trim(),
+        receiptId: String(r['Receipt ID'] || r.receiptId || '').trim() || null,
+      };
+    })
+    .filter((r) => r.date && r.source);
+
+  if (!sort) return mapped;
+  return mapped.sort((a, b) => (a.date - b.date) || ((a.creationDate || 0) - (b.creationDate || 0)));
 }
 
 /** Running balance per source, keyed by source name -> current balance. */
@@ -100,20 +115,7 @@ export function netWorthTrend(transactions) {
   return Array.from(byDay.entries()).map(([date, total]) => ({ date, total }));
 }
 
-/** Expense breakdown by main category for a given month key ('YYYY/MM') or 'all'. */
-export function categoryBreakdown(transactions, monthFilter = 'all') {
-  const map = new Map();
-  for (const t of transactions) {
-    if (t.type !== 'Expense') continue;
-    if (monthFilter !== 'all' && monthKey(t.date) !== monthFilter) continue;
-    const key = t.mainCategory || 'Other';
-    map.set(key, (map.get(key) || 0) + Math.abs(t.change));
-  }
-  return Array.from(map.entries())
-    .map(([category, amount]) => ({ category, amount }))
-    .sort((a, b) => b.amount - a.amount);
-}
-
-export function transactionsBySource(transactions, source) {
-  return transactions.filter((t) => t.source === source).slice().sort((a, b) => b.date - a.date);
+/** Newest date first; newest creation_date first when dates match. */
+export function compareTransactionsDesc(a, b) {
+  return (b.date - a.date) || ((b.creationDate || 0) - (a.creationDate || 0));
 }

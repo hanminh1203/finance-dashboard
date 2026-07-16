@@ -1,10 +1,10 @@
 import { Line } from 'react-chartjs-2';
 import '../lib/chartSetup';
-import { formatAUD } from '../lib/transform';
+import { formatAUD, formatDateShort } from '../lib/transform';
 
 export default function NetWorthChart({ points }) {
   const data = {
-    labels: points.map((p) => p.date),
+    labels: points.map((p) => formatDateShort(p.date)),
     datasets: [
       {
         label: 'Net worth',

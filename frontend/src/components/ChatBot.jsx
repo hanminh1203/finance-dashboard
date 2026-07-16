@@ -1,16 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import Card from './Card';
 import { inputClass } from './FormField';
-import { parseFinanceMessage } from '../lib/groqAgent';
-import { addTransaction, addTransfer } from '../lib/sheetsApi';
-import { formatAUD } from '../lib/transform';
-
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
-const GROQ_MODEL = import.meta.env.VITE_GROQ_MODEL || 'llama-3.3-70b-versatile';
+import { parseFinanceMessage, addTransaction, addTransfer } from '../lib/api';
+import { formatAUD, formatDateShort } from '../lib/transform';
 
 const WELCOME = 'Tell me about a transaction or transfer — e.g. "Spent $45 on groceries at Woolworths from Commonwealth today" or "Transfer $200 from Commonwealth to ING Savings".';
 
-export default function ChatBot({ metadata, token, onSaved }) {
+export default function ChatBot({ metadata, onSaved }) {
   const [messages, setMessages] = useState([{ role: 'assistant', text: WELCOME }]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -25,29 +21,19 @@ export default function ChatBot({ metadata, token, onSaved }) {
     const text = input.trim();
     if (!text || busy) return;
 
-    if (!GROQ_API_KEY) {
-      setMessages((m) => [
-        ...m,
-        { role: 'user', text },
-        { role: 'assistant', error: true, text: 'VITE_GROQ_API_KEY is not set. Add it to frontend/.env.' },
-      ]);
-      setInput('');
-      return;
-    }
-
     setMessages((m) => [...m, { role: 'user', text }]);
     setInput('');
     setBusy(true);
 
     try {
-      const parsed = await parseFinanceMessage({ apiKey: GROQ_API_KEY, model: GROQ_MODEL, message: text, metadata });
+      const parsed = await parseFinanceMessage({ message: text, metadata });
 
       if (parsed.action === 'transaction') {
         const { date, amount, type, source, subCategory, comment } = parsed;
         if (!amount || !type || !source || !subCategory) {
           throw new Error('Could not extract amount, type, source, and category from that. Try being more specific.');
         }
-        await addTransaction(token, { date, amount, type, source, subCategory, comment });
+        await addTransaction({ date, amount, type, source, subCategory, comment });
         onSaved?.();
         setMessages((m) => [
           ...m,
@@ -55,7 +41,7 @@ export default function ChatBot({ metadata, token, onSaved }) {
             role: 'assistant',
             text: `✅ Added ${type.toLowerCase()} of ${formatAUD(Math.abs(amount))} — "${source}" / ${subCategory}${
               comment ? ` ("${comment}")` : ''
-            } on ${date}.`,
+            } on ${formatDateShort(date)}.`,
           },
         ]);
       } else if (parsed.action === 'transfer') {
@@ -63,13 +49,13 @@ export default function ChatBot({ metadata, token, onSaved }) {
         if (!amount || !fromSource || !toSource) {
           throw new Error('Could not extract amount, source, and destination for that transfer. Try being more specific.');
         }
-        await addTransfer(token, { date, amount, fromSource, toSource, comment });
+        await addTransfer({ date, amount, fromSource, toSource, comment });
         onSaved?.();
         setMessages((m) => [
           ...m,
           {
             role: 'assistant',
-            text: `✅ Transferred ${formatAUD(amount)} from "${fromSource}" to "${toSource}" on ${date} (2 linked transactions recorded).`,
+            text: `✅ Transferred ${formatAUD(amount)} from "${fromSource}" to "${toSource}" on ${formatDateShort(date)} (2 linked transactions recorded).`,
           },
         ]);
       } else {

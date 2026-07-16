@@ -1,0 +1,23 @@
+---
+description: Keep setup-env.ps1 in sync when adding or changing secrets
+alwaysApply: true
+---
+
+# Env setup script must stay in sync with secrets
+
+When you introduce, rename, remove, or relocate a **secret or developer-supplied env var** (API keys, OAuth credentials, sheet IDs, signing keys, etc.):
+
+1. Update the matching `.env.example` (`backend/.env.example` and/or `frontend/.env.example`).
+2. Update [`setup-env.ps1`](setup-env.ps1):
+   - **Secrets that developers must type** → `$BackendSecrets` or `$FrontendSecrets` (name + prompt; use `GenerateIfEmpty` only for values that can be auto-generated like `DJANGO_SECRET_KEY`).
+   - **Non-secret defaults** (URLs, table names, model IDs) → `$BackendDefaults` (or frontend defaults if added).
+3. Do **not** put real secret values in the repo, README samples, or commit `.env` files.
+4. If the frontend gains a `VITE_*` secret, add it to `frontend/.env.example` **and** `$FrontendSecrets` (that list is currently empty on purpose).
+
+```powershell
+# ❌ BAD — new GROQ_ORG_ID in settings/.env.example only
+# ✅ GOOD — also add to setup-env.ps1:
+@{ Name = 'GROQ_ORG_ID'; Prompt = 'Groq organization ID' }
+```
+
+`setup-env.bat` only launches the PowerShell script; edit `setup-env.ps1` for secret lists.

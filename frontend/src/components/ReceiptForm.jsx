@@ -1,20 +1,23 @@
 import { useMemo, useRef, useState } from 'react';
-import Card from './Card';
 import { Field, inputClass, selectClass } from './FormField';
-import { addReceipt } from '../lib/sheetsApi';
-import { extractReceiptFromImage, fileToDataUrl } from '../lib/groqAgent';
+import { addReceipt, extractReceiptFromImage } from '../lib/api';
+import { fileToDataUrl } from '../lib/imageUtils';
 import { formatAUD } from '../lib/transform';
 
 const UNITS = ['kg', 'g', 'ml', 'l', 'piece'];
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
-const GROQ_VISION_MODEL =
-  import.meta.env.VITE_GROQ_VISION_MODEL || 'meta-llama/llama-4-scout-17b-16e-instruct';
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const emptySource = () => ({ source: '', amount: '' });
 const emptyItem = () => ({ name: '', amount: '', unit: 'piece', money: '' });
 
-export default function ReceiptForm({ metadata, token, onSaved }) {
+const cancelClass =
+  'px-3 py-2.5 rounded-lg border border-bg-border bg-bg-raised text-text-secondary hover:text-text-primary font-medium transition-colors cursor-pointer';
+const submitClass =
+  'px-3 py-2.5 rounded-lg border border-bg-border bg-bg-raised text-text-primary hover:border-accent disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors cursor-pointer';
+const primaryClass =
+  'px-3 py-2.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors cursor-pointer';
+
+export default function ReceiptForm({ metadata, onSaved, onClose }) {
   const [store, setStore] = useState('');
   const [date, setDate] = useState(todayISO());
   const [subCategory, setSubCategory] = useState('');
@@ -26,6 +29,7 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [status, setStatus] = useState(null);
   const fileInputRef = useRef(null);
+  const closeAfterRef = useRef(false);
 
   const expenseCategories = useMemo(
     () => metadata.categories.filter((c) => c.type === 'Expense'),
@@ -63,16 +67,23 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
     setItems((prev) => prev.map((it, i) => (i === index ? { ...it, ...patch } : it)));
   }
 
+  function resetForm() {
+    setStore('');
+    setDate(todayISO());
+    setSubCategory('');
+    setComment('');
+    setSources([emptySource()]);
+    setItems([emptyItem()]);
+    setPreviewUrl(null);
+  }
+
   async function handleImageSelected(e) {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
 
-    if (!GROQ_API_KEY) {
-      setStatus({ ok: false, msg: 'VITE_GROQ_API_KEY is not set. Add it to frontend/.env.' });
-      return;
-    }
-
+    // Clear previous entry so stale fields are not visible while OCR runs.
+    resetForm();
     setExtracting(true);
     setStatus(null);
     try {
@@ -80,8 +91,6 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
       setPreviewUrl(dataUrl);
 
       const extracted = await extractReceiptFromImage({
-        apiKey: GROQ_API_KEY,
-        model: GROQ_VISION_MODEL,
         imageDataUrl: dataUrl,
         metadata,
       });
@@ -107,10 +116,12 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!canSubmit) return;
+    const shouldClose = closeAfterRef.current;
+    closeAfterRef.current = false;
     setSubmitting(true);
     setStatus(null);
     try {
-      const result = await addReceipt(token, {
+      const result = await addReceipt({
         date,
         store,
         subCategory,
@@ -122,13 +133,12 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
         ok: true,
         msg: `Receipt saved (${result.items} items, ${result.transactions} payment${result.transactions === 1 ? '' : 's'}).`,
       });
-      setStore('');
-      setComment('');
-      setSubCategory('');
-      setSources([emptySource()]);
-      setItems([emptyItem()]);
-      setPreviewUrl(null);
       onSaved?.();
+      if (shouldClose) {
+        onClose?.();
+      } else {
+        resetForm();
+      }
     } catch (err) {
       setStatus({ ok: false, msg: err.message || String(err) });
     } finally {
@@ -137,8 +147,7 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
   }
 
   return (
-    <Card title="Add Receipt" className="max-w-2xl w-full">
-      <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-5">
         <div className="rounded-lg border border-dashed border-bg-border bg-bg-raised/40 p-4 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
@@ -158,7 +167,7 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/*,.heic,.heif,image/heic,image/heif"
               capture="environment"
               className="hidden"
               onChange={handleImageSelected}
@@ -292,13 +301,13 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
               + Add item
             </button>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {items.map((it, i) => (
               <div
                 key={i}
-                className="grid grid-cols-1 sm:grid-cols-[1fr_5rem_5.5rem_6rem_auto] gap-2 items-end p-3 rounded-lg bg-bg-raised/50 border border-bg-border/60"
+                className="grid grid-cols-[1fr_5rem_5.5rem_6rem_auto] gap-2 items-end"
               >
-                <Field label="Name">
+                <Field label={i === 0 ? 'Name' : undefined}>
                   <input
                     type="text"
                     placeholder="Item name"
@@ -308,7 +317,7 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
                     required
                   />
                 </Field>
-                <Field label="Amount">
+                <Field label={i === 0 ? 'Amount' : undefined}>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -320,7 +329,7 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
                     className={inputClass}
                   />
                 </Field>
-                <Field label="Unit">
+                <Field label={i === 0 ? 'Unit' : undefined}>
                   <select
                     value={it.unit}
                     onChange={(e) => updateItem(i, { unit: e.target.value })}
@@ -334,7 +343,7 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
                     ))}
                   </select>
                 </Field>
-                <Field label="Money">
+                <Field label={i === 0 ? 'Money' : undefined}>
                   <input
                     type="number"
                     inputMode="decimal"
@@ -352,7 +361,7 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
                   disabled={items.length === 1}
                   onClick={() => setItems((prev) => prev.filter((_, j) => j !== i))}
                   aria-label="Remove item"
-                  className="sm:mb-0.5 p-2.5 rounded-lg text-text-muted hover:text-expense hover:bg-expense/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer justify-self-end"
+                  className="mb-0.5 p-2.5 rounded-lg text-text-muted hover:text-expense hover:bg-expense/10 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                 >
                   ✕
                 </button>
@@ -374,18 +383,31 @@ export default function ReceiptForm({ metadata, token, onSaved }) {
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="w-full py-2.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors cursor-pointer"
-        >
-          {submitting ? 'Saving…' : 'Save Receipt'}
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+          <button type="button" onClick={() => onClose?.()} className={cancelClass}>
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            onClick={() => { closeAfterRef.current = false; }}
+            className={submitClass}
+          >
+            {submitting ? 'Saving…' : 'Submit'}
+          </button>
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            onClick={() => { closeAfterRef.current = true; }}
+            className={primaryClass}
+          >
+            {submitting ? 'Saving…' : 'Submit and Close'}
+          </button>
+        </div>
 
         {status && (
           <p className={`text-sm ${status.ok ? 'text-income' : 'text-expense'}`}>{status.msg}</p>
         )}
-      </form>
-    </Card>
+    </form>
   );
 }

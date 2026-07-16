@@ -1,13 +1,23 @@
+import { NavLink } from 'react-router-dom';
+
 const TABS = [
-  { id: 'dashboard', label: 'Dashboard' },
-  { id: 'sources', label: 'Sources' },
-  { id: 'add', label: 'Add Transaction' },
-  { id: 'receipt', label: 'Receipt' },
-  { id: 'transfer', label: 'Transfer' },
-  { id: 'chat', label: 'Assistant' },
+  { to: '/', label: 'Dashboard', end: true },
+  { to: '/sources', label: 'Sources' },
+  { to: '/transactions', label: 'Transactions' },
+  { to: '/chat', label: 'Assistant' },
+  { to: '/health', label: 'Health' },
+  { to: '/management', label: 'Management' },
 ];
 
-export default function NavBar({ active, onChange, onRefresh, refreshing, onSignOut }) {
+function tabClassName({ isActive }, extra = '') {
+  return `px-3 rounded-lg text-sm font-medium transition-colors ${extra} ${
+    isActive
+      ? 'bg-bg-raised text-text-primary'
+      : 'text-text-secondary hover:text-text-primary hover:bg-bg-raised/60'
+  }`;
+}
+
+export default function NavBar({ onRefresh, refreshing, onSignOut }) {
   return (
     <header className="sticky top-0 z-30 border-b border-bg-border bg-bg/90 backdrop-blur">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
@@ -22,17 +32,14 @@ export default function NavBar({ active, onChange, onRefresh, refreshing, onSign
 
           <nav className="hidden md:flex items-center gap-1">
             {TABS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => onChange(t.id)}
-                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                  active === t.id
-                    ? 'bg-bg-raised text-text-primary'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-raised/60'
-                }`}
+              <NavLink
+                key={t.to}
+                to={t.to}
+                end={t.end}
+                className={(state) => tabClassName(state, 'py-2')}
               >
                 {t.label}
-              </button>
+              </NavLink>
             ))}
           </nav>
 
@@ -68,17 +75,14 @@ export default function NavBar({ active, onChange, onRefresh, refreshing, onSign
         {/* Mobile tabs */}
         <nav className="flex md:hidden gap-1 pb-3 overflow-x-auto scrollbar-thin">
           {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => onChange(t.id)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors cursor-pointer ${
-                active === t.id
-                  ? 'bg-bg-raised text-text-primary'
-                  : 'text-text-secondary hover:text-text-primary'
-              }`}
+            <NavLink
+              key={t.to}
+              to={t.to}
+              end={t.end}
+              className={(state) => tabClassName(state, 'py-1.5 whitespace-nowrap')}
             >
               {t.label}
-            </button>
+            </NavLink>
           ))}
         </nav>
       </div>

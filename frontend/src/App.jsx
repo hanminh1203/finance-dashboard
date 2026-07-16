@@ -1,29 +1,31 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import NavBar from './components/NavBar';
 import SignInScreen from './components/SignInScreen';
 import Dashboard from './pages/Dashboard';
 import Sources from './pages/Sources';
-import AddTransactionForm from './components/AddTransactionForm';
-import ReceiptForm from './components/ReceiptForm';
-import TransferForm from './components/TransferForm';
-import { useGoogleAuth } from './hooks/useGoogleAuth';
+import Health from './pages/Health';
+import Management from './pages/Management';
+import Transactions from './pages/Transactions';
+import { useAuth } from './hooks/useAuth';
 import { useFinanceData } from './hooks/useFinanceData';
 import { currentBalances } from './lib/transform';
 import ChatBot from './components/ChatBot';
 
 export default function App() {
-  const { token, signedIn, gsiReady, error: authError, signIn, signOut } = useGoogleAuth();
-  const { transactions, metadata, monthlySummary, loading, error, refresh } = useFinanceData(token);
-  const [tab, setTab] = useState('dashboard');
+  const { signedIn, ready, error: authError, signIn, signOut } = useAuth();
+  const { transactions, metadata, monthlySummary, loading, error, refresh, listVersion } = useFinanceData(signedIn);
+  const { pathname } = useLocation();
   const balances = useMemo(() => currentBalances(transactions), [transactions]);
+  const skipLoading = pathname === '/health' || pathname === '/management';
 
   if (!signedIn) {
-    return <SignInScreen onSignIn={signIn} error={authError} ready={gsiReady} />;
+    return <SignInScreen onSignIn={signIn} error={authError} ready={ready} />;
   }
 
   return (
     <div className="min-h-screen bg-bg">
-      <NavBar active={tab} onChange={setTab} onRefresh={refresh} refreshing={loading} onSignOut={signOut} />
+      <NavBar onRefresh={refresh} refreshing={loading} onSignOut={signOut} />
 
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         {error && (
@@ -35,31 +37,37 @@ export default function App() {
           </div>
         )}
 
-        {loading && transactions.length === 0 ? (
+        {/* Avoid mounting routes until first load so Dashboard is not remounted mid-fetch. */}
+        {!skipLoading && listVersion === 0 && !error ? (
           <LoadingState />
         ) : (
-          <>
-            {tab === 'dashboard' && <Dashboard transactions={transactions} monthlySummary={monthlySummary} />}
-            {tab === 'sources' && <Sources transactions={transactions} metadata={metadata} />}
-            {tab === 'add' && (
-              <div className="flex justify-center">
-                <AddTransactionForm metadata={metadata} token={token} onSaved={refresh} />
-              </div>
-            )}
-            {tab === 'receipt' && (
-              <div className="flex justify-center">
-                <ReceiptForm metadata={metadata} token={token} onSaved={refresh} />
-              </div>
-            )}
-            {tab === 'transfer' && (
-              <div className="flex justify-center">
-                <TransferForm metadata={metadata} balances={balances} token={token} onSaved={refresh} />
-              </div>
-            )}
-            {tab === 'chat' && (
-              <ChatBot metadata={metadata} token={token} onSaved={refresh} />
-            )}
-          </>
+          <Routes>
+            <Route
+              path="/"
+              element={<Dashboard transactions={transactions} monthlySummary={monthlySummary} listVersion={listVersion} />}
+            />
+            <Route
+              path="/sources"
+              element={
+                <Sources transactions={transactions} metadata={metadata} listVersion={listVersion} />
+              }
+            />
+            <Route
+              path="/transactions"
+              element={
+                <Transactions
+                  metadata={metadata}
+                  balances={balances}
+                  onSaved={refresh}
+                  listVersion={listVersion}
+                />
+              }
+            />
+            <Route path="/chat" element={<ChatBot metadata={metadata} onSaved={refresh} />} />
+            <Route path="/health" element={<Health />} />
+            <Route path="/management" element={<Management />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         )}
       </main>
     </div>
