@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from datetime import date as date_cls
 from typing import Any
 
 import requests
@@ -24,6 +25,18 @@ RECEIPT_TX_COLUMNS = [
     'Sub category',
     'Receipt ID',
 ]
+GIFTCARD_COLUMNS = ['Giftcard ID', 'Shop', 'Date', 'Balance']
+# Giftcard ID sits after Receipt ID so columns stay contiguous in the sheet table.
+GIFTCARD_TX_COLUMNS = [
+    'Date',
+    'Change',
+    'Source',
+    'Comment',
+    'Sub category',
+    'Receipt ID',
+    'Giftcard ID',
+]
+GIFTCARD_SOURCE_NAME = 'Giftcard'
 
 
 class SheetsError(Exception):
@@ -242,19 +255,28 @@ class SheetsClient:
         return rows
 
     def get_mirror_source_rows(self) -> dict[str, list[dict]]:
-        """Read mirror tables (Transactions, Receipt, Receipt_Items, Category, Sources)."""
+        """Read mirror tables (Transactions, Receipt, Receipt_Items, Category, Sources, Giftcard)."""
         tx_table = self.get_table(settings.TRANSACTIONS_TABLE)
         receipt_table = self.get_table(settings.RECEIPT_TABLE)
         items_table = self.get_table(settings.RECEIPT_ITEMS_TABLE)
         category_table = self.get_table(settings.CATEGORY_TABLE)
         sources_table = self.get_table(settings.SOURCES_TABLE)
-        tx_vals, receipt_vals, item_vals, category_vals, sources_vals = self.batch_get_values(
+        giftcard_table = self.get_table(settings.GIFTCARD_TABLE)
+        (
+            tx_vals,
+            receipt_vals,
+            item_vals,
+            category_vals,
+            sources_vals,
+            giftcard_vals,
+        ) = self.batch_get_values(
             [
                 self.data_range_a1(tx_table),
                 self.data_range_a1(receipt_table),
                 self.data_range_a1(items_table),
                 self.data_range_a1(category_table),
                 self.data_range_a1(sources_table),
+                self.data_range_a1(giftcard_table),
             ]
         )
         return {
@@ -263,7 +285,64 @@ class SheetsClient:
             'receipt_items': self._rows_as_dicts(items_table, item_vals),
             'categories': self._rows_as_dicts(category_table, category_vals),
             'sources': self._rows_as_dicts(sources_table, sources_vals),
+            'giftcards': self._rows_as_dicts(giftcard_table, giftcard_vals),
         }
+
+    def update_table_cell_at_row(
+        self,
+        table_name: str,
+        *,
+        sheet_row: int,
+        update_column: str,
+        new_value: Any,
+    ) -> None:
+        """Update a single cell in a sheet table at a known 1-based sheet row."""
+        table = self.get_table(table_name)
+        update_col = next((c for c in table['columns'] if c['name'] == update_column), None)
+        if not update_col:
+            raise SheetsError(f'Column "{update_column}" not found in table "{table_name}"')
+        col_letter = column_letter(update_col['index'])
+        a1 = f"{quote_sheet_title(table['sheetTitle'])}!{col_letter}{int(sheet_row)}"
+        self.request(
+            f'/values/{requests.utils.quote(a1, safe="")}?valueInputOption=USER_ENTERED',
+            method='PUT',
+            json_body={'values': [[new_value]]},
+        )
+
+    def update_table_cell(
+        self,
+        table_name: str,
+        *,
+        match_column: str,
+        match_value: str,
+        update_column: str,
+        new_value: Any,
+    ) -> None:
+        """Update a single cell in a sheet table row matched by column value."""
+        table = self.get_table(table_name)
+        headers = [c['name'] for c in table['columns']]
+        match_idx = self.find_col(headers, rf'^{re.escape(match_column)}$')
+        if match_idx < 0:
+            raise SheetsError(f'Column "{match_column}" not found in table "{table_name}"')
+
+        values = self.get_values(self.data_range_a1(table))
+        start_row = table['range']['startRowIndex'] + 2
+        sheet_row = None
+        for i, row in enumerate(values):
+            cell = row[match_idx] if match_idx < len(row) else None
+            if str(cell or '').strip() == str(match_value).strip():
+                sheet_row = start_row + i
+                break
+        if sheet_row is None:
+            raise SheetsError(
+                f'No row with {match_column}={match_value!r} in table "{table_name}"'
+            )
+        self.update_table_cell_at_row(
+            table_name,
+            sheet_row=sheet_row,
+            update_column=update_column,
+            new_value=new_value,
+        )
 
     def append_rows(self, table_name: str, column_names: list[str], rows: list[list]) -> list[int]:
         """Append rows; return 1-based sheet row numbers for each appended row."""
@@ -503,4 +582,154 @@ class SheetsClient:
             'total': total,
             'items': len(normalized_items),
             'transactions': len(normalized_sources),
+        }
+
+    def buy_giftcard(
+        self,
+        *,
+        shop: str,
+        date: str,
+        balance: Any,
+        source: str,
+    ) -> dict:
+        shop_name = (shop or '').strip()
+        payment_source = (source or '').strip()
+        if not date:
+            raise SheetsError('Date is required')
+        if not shop_name:
+            raise SheetsError('Shop is required')
+        if not payment_source:
+            raise SheetsError('Source is required')
+        if payment_source == GIFTCARD_SOURCE_NAME:
+            raise SheetsError('Payment source cannot be Giftcard')
+        try:
+            abs_amt = abs(float(balance))
+        except (TypeError, ValueError):
+            raise SheetsError('Invalid balance')
+        if not abs_amt:
+            raise SheetsError('Invalid balance')
+
+        giftcard_id = str(uuid.uuid4())
+        note = f'Buy giftcard: {shop_name}'
+        sub_category = 'Giftcards'
+
+        gc_row_numbers = self.append_rows(
+            settings.GIFTCARD_TABLE,
+            GIFTCARD_COLUMNS,
+            [[giftcard_id, shop_name, date, abs_amt]],
+        )
+        tx_row_numbers = self.append_rows(
+            settings.TRANSACTIONS_TABLE,
+            GIFTCARD_TX_COLUMNS,
+            [
+                [date, -abs_amt, payment_source, note, sub_category, '', giftcard_id],
+                [
+                    date,
+                    abs_amt,
+                    GIFTCARD_SOURCE_NAME,
+                    note,
+                    sub_category,
+                    '',
+                    giftcard_id,
+                ],
+            ],
+        )
+
+        db_writer.save_giftcard_purchase(
+            giftcard_id=giftcard_id,
+            shop=shop_name,
+            date=date,
+            balance=abs_amt,
+            row_number=gc_row_numbers[0],
+            transactions=[
+                {
+                    'date': date,
+                    'change': -abs_amt,
+                    'source': payment_source,
+                    'comment': note,
+                    'sub_category': sub_category,
+                    'row_number': tx_row_numbers[0],
+                },
+                {
+                    'date': date,
+                    'change': abs_amt,
+                    'source': GIFTCARD_SOURCE_NAME,
+                    'comment': note,
+                    'sub_category': sub_category,
+                    'row_number': tx_row_numbers[1],
+                },
+            ],
+        )
+        return {
+            'giftcardId': giftcard_id,
+            'shop': shop_name,
+            'date': date,
+            'balance': abs_amt,
+            'transactions': 2,
+        }
+
+    def use_giftcard(
+        self,
+        *,
+        giftcard_id: str,
+        amount: Any,
+        comment: str = '',
+        sub_category: str = '',
+    ) -> dict:
+        from finance.models import Giftcard
+
+        gid = str(giftcard_id or '').strip()
+        if not gid:
+            raise SheetsError('Giftcard ID is required')
+        category = (sub_category or '').strip()
+        if not category:
+            raise SheetsError('Sub category is required')
+        try:
+            abs_amt = abs(float(amount))
+        except (TypeError, ValueError):
+            raise SheetsError('Invalid amount')
+        if not abs_amt:
+            raise SheetsError('Invalid amount')
+
+        try:
+            card = Giftcard.objects.get(pk=gid)
+        except (Giftcard.DoesNotExist, ValueError) as exc:
+            raise SheetsError('Giftcard not found', status=404) from exc
+
+        current = float(card.balance)
+        if abs_amt > current + 0.009:
+            raise SheetsError(
+                f'Amount ({abs_amt}) exceeds giftcard balance ({current})'
+            )
+
+        new_balance = round((current - abs_amt) * 100) / 100
+        note = (comment or '').strip() or f'Use giftcard: {card.shop}'
+        date = date_cls.today().isoformat()
+
+        tx_row_numbers = self.append_rows(
+            settings.TRANSACTIONS_TABLE,
+            GIFTCARD_TX_COLUMNS,
+            [[date, -abs_amt, GIFTCARD_SOURCE_NAME, note, category, '', gid]],
+        )
+        self.update_table_cell_at_row(
+            settings.GIFTCARD_TABLE,
+            sheet_row=card.row_number,
+            update_column='Balance',
+            new_value=new_balance,
+        )
+
+        db_writer.save_giftcard_use(
+            giftcard_id=gid,
+            new_balance=new_balance,
+            date=date,
+            change=-abs_amt,
+            comment=note,
+            sub_category=category,
+            row_number=tx_row_numbers[0],
+        )
+        return {
+            'giftcardId': gid,
+            'amount': abs_amt,
+            'balance': new_balance,
+            'transactions': 1,
         }

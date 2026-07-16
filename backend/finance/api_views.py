@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import secrets
+import sys
 import time
+import traceback
 from datetime import datetime, timezone
 from functools import wraps
 from typing import Callable
@@ -20,6 +22,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from . import oauth
 from .db_reader import (
     ReaderError,
+    get_giftcards as db_get_giftcards,
     get_income_expense_by_month as db_get_income_expense_by_month,
     get_metadata as db_get_metadata,
     get_receipt as db_get_receipt,
@@ -32,6 +35,10 @@ from .sheets_client import SheetsClient, SheetsError
 
 
 def json_error(message: str, status: int = 400) -> JsonResponse:
+    # Print stack when called from an except block (most API error paths).
+    if sys.exc_info()[0] is not None:
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
     return JsonResponse({'error': message}, status=status)
 
 
@@ -247,6 +254,48 @@ def get_receipt(request: HttpRequest, receipt_id: str) -> JsonResponse:
     except ReaderError as exc:
         return json_error(str(exc), status=exc.status)
     return JsonResponse(data)
+
+
+@require_GET
+@require_auth
+def giftcards(request: HttpRequest) -> JsonResponse:
+    return JsonResponse(db_get_giftcards(), safe=False)
+
+
+@require_http_methods(['POST'])
+@require_auth
+def buy_giftcard(request: HttpRequest) -> JsonResponse:
+    try:
+        body = parse_json(request)
+        result = sheets_for(request).buy_giftcard(
+            shop=body.get('shop'),
+            date=body.get('date'),
+            balance=body.get('balance'),
+            source=body.get('source'),
+        )
+    except ValueError as exc:
+        return json_error(str(exc))
+    except SheetsError as exc:
+        return json_error(str(exc), status=exc.status or 400)
+    return JsonResponse(result)
+
+
+@require_http_methods(['POST'])
+@require_auth
+def use_giftcard(request: HttpRequest, giftcard_id: str) -> JsonResponse:
+    try:
+        body = parse_json(request)
+        result = sheets_for(request).use_giftcard(
+            giftcard_id=giftcard_id,
+            amount=body.get('amount'),
+            comment=body.get('comment') or '',
+            sub_category=body.get('subCategory') or '',
+        )
+    except ValueError as exc:
+        return json_error(str(exc))
+    except SheetsError as exc:
+        return json_error(str(exc), status=exc.status or 400)
+    return JsonResponse(result)
 
 
 @require_http_methods(['POST'])

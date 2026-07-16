@@ -4,6 +4,7 @@ const TABS = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/sources', label: 'Sources' },
   { to: '/transactions', label: 'Transactions' },
+  { to: '/giftcards', label: 'Giftcards' },
   { to: '/chat', label: 'Assistant' },
   { to: '/health', label: 'Health' },
   { to: '/management', label: 'Management' },

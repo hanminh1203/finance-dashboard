@@ -10,9 +10,11 @@ from typing import Any
 
 from django.db import transaction as db_transaction
 
-from finance.models import Category, Receipt, ReceiptItem, Source, Transaction
+from finance.models import Category, Giftcard, Receipt, ReceiptItem, Source, Transaction
 
 logger = logging.getLogger(__name__)
+
+GIFTCARD_SOURCE_NAME = 'Giftcard'
 
 
 def _parse_date(value: Any) -> date:
@@ -68,7 +70,7 @@ def save_transactions(rows: list[dict]) -> None:
     """
     Insert Transaction rows.
 
-    Each row dict: date, change, source, row_number, comment?, sub_category?, receipt_id?
+    Each row dict: date, change, source, row_number, comment?, sub_category?, receipt_id?, giftcard_id?
     source / sub_category are sheet names resolved to Source / Category FKs.
     row_number is the 1-based Google Sheets row for the Transactions table.
     """
@@ -78,6 +80,7 @@ def save_transactions(rows: list[dict]) -> None:
         objs = []
         for row in rows:
             receipt_id = row.get('receipt_id')
+            giftcard_id = row.get('giftcard_id')
             objs.append(
                 Transaction(
                     id=uuid.uuid4(),
@@ -89,6 +92,7 @@ def save_transactions(rows: list[dict]) -> None:
                     comment=str(row.get('comment') or ''),
                     category_id=_resolve_category_id(row.get('sub_category') or ''),
                     receipt_id=uuid.UUID(str(receipt_id)) if receipt_id else None,
+                    giftcard_id=uuid.UUID(str(giftcard_id)) if giftcard_id else None,
                 )
             )
         Transaction.objects.bulk_create(objs)
@@ -105,6 +109,7 @@ def save_transaction(
     comment: str = '',
     sub_category: str = '',
     receipt_id: Any = None,
+    giftcard_id: Any = None,
 ) -> None:
     save_transactions(
         [
@@ -116,6 +121,7 @@ def save_transaction(
                 'comment': comment,
                 'sub_category': sub_category,
                 'receipt_id': receipt_id,
+                'giftcard_id': giftcard_id,
             }
         ]
     )
@@ -177,3 +183,76 @@ def save_receipt_bundle(
             )
     except Exception:
         logger.exception('Postgres dual-write failed for receipt bundle %s', receipt_id)
+
+
+def save_giftcard_purchase(
+    *,
+    giftcard_id: Any,
+    shop: str,
+    date: Any,
+    balance: Any,
+    row_number: int,
+    transactions: list[dict],
+) -> None:
+    """Insert Giftcard + linked buy Transactions in one DB transaction."""
+    try:
+        gid = uuid.UUID(str(giftcard_id))
+        with db_transaction.atomic():
+            Giftcard.objects.create(
+                id=gid,
+                version=1,
+                row_number=int(row_number),
+                shop=str(shop),
+                date=_parse_date(date),
+                balance=_dec(balance),
+            )
+            Transaction.objects.bulk_create(
+                [
+                    Transaction(
+                        id=uuid.uuid4(),
+                        version=1,
+                        row_number=int(tx['row_number']),
+                        date=_parse_date(tx.get('date', date)),
+                        change=_dec(tx['change']),
+                        source_id=_resolve_source_id(tx.get('source') or ''),
+                        comment=str(tx.get('comment') or ''),
+                        category_id=_resolve_category_id(tx.get('sub_category') or ''),
+                        giftcard_id=gid,
+                    )
+                    for tx in transactions
+                ]
+            )
+    except Exception:
+        logger.exception('Postgres dual-write failed for giftcard purchase %s', giftcard_id)
+
+
+def save_giftcard_use(
+    *,
+    giftcard_id: Any,
+    new_balance: Any,
+    date: Any,
+    change: Any,
+    comment: str,
+    sub_category: str,
+    row_number: int,
+) -> None:
+    """Insert use Transaction and update Giftcard.balance in one DB transaction."""
+    try:
+        gid = uuid.UUID(str(giftcard_id))
+        with db_transaction.atomic():
+            updated = Giftcard.objects.filter(pk=gid).update(balance=_dec(new_balance))
+            if not updated:
+                raise ValueError(f'Giftcard {gid} not found')
+            Transaction.objects.create(
+                id=uuid.uuid4(),
+                version=1,
+                row_number=int(row_number),
+                date=_parse_date(date),
+                change=_dec(change),
+                source_id=_resolve_source_id(GIFTCARD_SOURCE_NAME),
+                comment=str(comment or ''),
+                category_id=_resolve_category_id(sub_category or ''),
+                giftcard_id=gid,
+            )
+    except Exception:
+        logger.exception('Postgres dual-write failed for giftcard use %s', giftcard_id)

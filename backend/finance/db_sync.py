@@ -12,7 +12,7 @@ from django.db import transaction as db_transaction
 from django.utils import timezone
 
 from finance.db_writer import _parse_date
-from finance.models import Category, Receipt, ReceiptItem, Source, Transaction
+from finance.models import Category, Giftcard, Receipt, ReceiptItem, Source, Transaction
 from finance.sheets_client import SheetsClient
 
 MIRROR_TABLE_KEYS = (
@@ -21,6 +21,7 @@ MIRROR_TABLE_KEYS = (
     'receipt_items',
     'category',
     'sources',
+    'giftcards',
 )
 
 
@@ -74,6 +75,18 @@ def _item_fp(
     return (str(receipt_id), str(name or '').strip(), _fp_dec(amount), str(unit or '').strip(), _fp_dec(money))
 
 
+def _giftcard_fp(
+    row_number: int, giftcard_id: uuid.UUID, shop: str, d: date, balance: Decimal
+) -> tuple:
+    return (
+        int(row_number),
+        str(giftcard_id),
+        str(shop or '').strip(),
+        d.isoformat(),
+        _fp_dec(balance),
+    )
+
+
 def _tx_fp(
     row_number: int,
     d: date,
@@ -82,6 +95,7 @@ def _tx_fp(
     comment: str,
     sub_category: str,
     receipt_id: uuid.UUID | None,
+    giftcard_id: uuid.UUID | None,
 ) -> tuple:
     return (
         int(row_number),
@@ -91,6 +105,7 @@ def _tx_fp(
         str(comment or ''),
         str(sub_category or '').strip(),
         str(receipt_id) if receipt_id else '',
+        str(giftcard_id) if giftcard_id else '',
     )
 
 
@@ -140,9 +155,33 @@ def _parse_item_row(row: dict, index: int) -> tuple[uuid.UUID, str, Decimal, str
         raise SyncError(f'Receipt item row {index + 1}: {exc}') from exc
 
 
+def _parse_giftcard_row(
+    row: dict, index: int
+) -> tuple[int, uuid.UUID, str, date, Decimal]:
+    try:
+        gid = _optional_uuid(_cell(row, 'Giftcard ID'))
+        if gid is None:
+            raise ValueError('Giftcard ID is required')
+        shop = str(_cell(row, 'Shop') or '').strip()
+        if not shop:
+            raise ValueError('Shop is required')
+        sheet_row = row.get('__sheet_row')
+        if sheet_row is None:
+            raise ValueError('Sheet row number is required')
+        return (
+            int(sheet_row),
+            gid,
+            shop,
+            _parse_date(_cell(row, 'Date')),
+            _sheet_dec(_cell(row, 'Balance')),
+        )
+    except ValueError as exc:
+        raise SyncError(f'Giftcard row {index + 1}: {exc}') from exc
+
+
 def _parse_tx_row(
     row: dict, index: int
-) -> tuple[int, date, Decimal, str, str, str, uuid.UUID | None]:
+) -> tuple[int, date, Decimal, str, str, str, uuid.UUID | None, uuid.UUID | None]:
     try:
         source_name = str(_cell(row, 'Source') or '').strip()
         if not source_name:
@@ -158,6 +197,7 @@ def _parse_tx_row(
             str(_cell(row, 'Comment') or ''),
             str(_cell(row, 'Sub category', 'Sub Category') or '').strip(),
             _optional_uuid(_cell(row, 'Receipt ID')),
+            _optional_uuid(_cell(row, 'Giftcard ID')),
         )
     except ValueError as exc:
         raise SyncError(f'Transaction row {index + 1}: {exc}') from exc
@@ -193,6 +233,9 @@ def _parse_sheet_fingerprints(source: dict[str, list[dict]]) -> dict[str, list[t
     items = [
         _item_fp(*_parse_item_row(row, i)) for i, row in enumerate(source['receipt_items'])
     ]
+    giftcards = [
+        _giftcard_fp(*_parse_giftcard_row(row, i)) for i, row in enumerate(source['giftcards'])
+    ]
     transactions = [
         _tx_fp(*_parse_tx_row(row, i)) for i, row in enumerate(source['transactions'])
     ]
@@ -205,6 +248,7 @@ def _parse_sheet_fingerprints(source: dict[str, list[dict]]) -> dict[str, list[t
     return {
         'receipt': receipts,
         'receipt_items': items,
+        'giftcards': giftcards,
         'transactions': transactions,
         'category': categories,
         'sources': sources,
@@ -219,6 +263,10 @@ def _db_fingerprints() -> dict[str, list[tuple]]:
         _item_fp(it.receipt_id, it.name, it.amount, it.unit, it.money)
         for it in ReceiptItem.objects.all().iterator()
     ]
+    giftcards = [
+        _giftcard_fp(g.row_number, g.id, g.shop, g.date, g.balance)
+        for g in Giftcard.objects.all().iterator()
+    ]
     transactions = [
         _tx_fp(
             tx.row_number,
@@ -228,6 +276,7 @@ def _db_fingerprints() -> dict[str, list[tuple]]:
             tx.comment,
             tx.category.sub_category if tx.category_id else '',
             tx.receipt_id,
+            tx.giftcard_id,
         )
         for tx in Transaction.objects.select_related('source', 'category').iterator()
     ]
@@ -239,6 +288,7 @@ def _db_fingerprints() -> dict[str, list[tuple]]:
     return {
         'receipt': receipts,
         'receipt_items': items,
+        'giftcards': giftcards,
         'transactions': transactions,
         'category': categories,
         'sources': sources,
@@ -334,12 +384,43 @@ def sync_from_sheets(client: SheetsClient) -> dict:
             )
         )
 
+    giftcard_objs: list[Giftcard] = []
+    seen_giftcard_ids: set[uuid.UUID] = set()
+    seen_giftcard_rows: set[int] = set()
+    for i, row in enumerate(source['giftcards']):
+        row_number, gid, shop, d, balance = _parse_giftcard_row(row, i)
+        if gid in seen_giftcard_ids:
+            raise SyncError(f'Giftcard row {i + 1}: duplicate Giftcard ID {gid}')
+        if row_number in seen_giftcard_rows:
+            raise SyncError(
+                f'Giftcard row {i + 1}: duplicate sheet row_number {row_number}'
+            )
+        seen_giftcard_ids.add(gid)
+        seen_giftcard_rows.add(row_number)
+        giftcard_objs.append(
+            Giftcard(
+                id=gid,
+                version=1,
+                row_number=row_number,
+                shop=shop,
+                date=d,
+                balance=balance,
+            )
+        )
+
     tx_objs: list[Transaction] = []
     seen_tx_rows: set[int] = set()
     for i, row in enumerate(source['transactions']):
-        row_number, d, change, source_name, comment, sub_category, receipt_id = _parse_tx_row(
-            row, i
-        )
+        (
+            row_number,
+            d,
+            change,
+            source_name,
+            comment,
+            sub_category,
+            receipt_id,
+            giftcard_id,
+        ) = _parse_tx_row(row, i)
         if row_number in seen_tx_rows:
             raise SyncError(
                 f'Transaction row {i + 1}: duplicate sheet row_number {row_number}'
@@ -361,6 +442,10 @@ def sync_from_sheets(client: SheetsClient) -> dict:
             raise SyncError(
                 f'Transaction row {i + 1}: Receipt ID {receipt_id} not found in Receipt table'
             )
+        if giftcard_id is not None and giftcard_id not in seen_giftcard_ids:
+            raise SyncError(
+                f'Transaction row {i + 1}: Giftcard ID {giftcard_id} not found in Giftcard table'
+            )
         tx_objs.append(
             Transaction(
                 id=uuid.uuid4(),
@@ -372,6 +457,7 @@ def sync_from_sheets(client: SheetsClient) -> dict:
                 comment=comment,
                 category_id=category_id,
                 receipt_id=receipt_id,
+                giftcard_id=giftcard_id,
             )
         )
 
@@ -379,12 +465,14 @@ def sync_from_sheets(client: SheetsClient) -> dict:
         Transaction.objects.all().delete()
         ReceiptItem.objects.all().delete()
         Receipt.objects.all().delete()
+        Giftcard.objects.all().delete()
         Category.objects.all().delete()
         Source.objects.all().delete()
         Category.objects.bulk_create(category_objs)
         Source.objects.bulk_create(source_objs)
         Receipt.objects.bulk_create(receipt_objs)
         ReceiptItem.objects.bulk_create(item_objs)
+        Giftcard.objects.bulk_create(giftcard_objs)
         Transaction.objects.bulk_create(tx_objs)
 
     return {
@@ -393,6 +481,7 @@ def sync_from_sheets(client: SheetsClient) -> dict:
             'transactions': len(tx_objs),
             'receipt': len(receipt_objs),
             'receipt_items': len(item_objs),
+            'giftcards': len(giftcard_objs),
             'category': len(category_objs),
             'sources': len(source_objs),
         },

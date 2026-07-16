@@ -35,6 +35,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'finance.middleware.JsonExceptionMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -104,6 +105,7 @@ CATEGORY_TABLE = os.environ.get('CATEGORY_TABLE', 'Category')
 SOURCES_TABLE = os.environ.get('SOURCES_TABLE', 'Sources')
 RECEIPT_TABLE = os.environ.get('RECEIPT_TABLE', 'Receipt')
 RECEIPT_ITEMS_TABLE = os.environ.get('RECEIPT_ITEMS_TABLE', 'Receipt_Items')
+GIFTCARD_TABLE = os.environ.get('GIFTCARD_TABLE', 'Giftcard')
 
 # Groq
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')

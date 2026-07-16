@@ -92,6 +92,18 @@ export function getReceipt(id) {
   return api(`/receipts/${encodeURIComponent(id)}`);
 }
 
+export function getGiftcards() {
+  return api('/giftcards');
+}
+
+export function buyGiftcard(payload) {
+  return api('/giftcards/buy', { method: 'POST', body: payload });
+}
+
+export function useGiftcard(id, payload) {
+  return api(`/giftcards/${encodeURIComponent(id)}/use`, { method: 'POST', body: payload });
+}
+
 export function parseFinanceMessage({ message, metadata }) {
   return api('/assistant/parse', { method: 'POST', body: { message, metadata } });
 }

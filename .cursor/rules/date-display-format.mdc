@@ -1,0 +1,28 @@
+---
+description: Display all user-facing dates as dd/MM/yyyy
+globs: frontend/**/*.{js,jsx,ts,tsx}
+alwaysApply: false
+---
+
+# Date display format
+
+Every **user-facing** date in the UI must be shown as `dd/MM/yyyy` (zero-padded day and month).
+
+## Do
+
+- Format display values with `formatDateShort` from `frontend/src/lib/transform.js` (already outputs `dd/MM/yyyy`).
+- Pass ISO strings, sheet dates, or `Date` objects through `formatDateShort` / `parseDate` — never render raw API/ISO dates.
+
+```jsx
+// ❌ BAD — raw ISO or sheet value
+<td>{g.date}</td>
+
+// ✅ GOOD
+<td>{formatDateShort(g.date)}</td>
+```
+
+## Do not
+
+- Do not invent a second formatter; extend `formatDateShort` if the shared helper needs a change.
+- Do not use `toLocaleDateString`, `toISOString().slice(0, 10)`, or locale defaults for **display**.
+- HTML `<input type="date">` values stay ISO (`yyyy-MM-dd`) for the control; only the **shown** text must be `dd/MM/yyyy`.
