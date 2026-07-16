@@ -7,6 +7,7 @@ import Sources from './pages/Sources';
 import Health from './pages/Health';
 import Management from './pages/Management';
 import Transactions from './pages/Transactions';
+import Giftcards from './pages/Giftcards';
 import { useAuth } from './hooks/useAuth';
 import { useFinanceData } from './hooks/useFinanceData';
 import { currentBalances } from './lib/transform';
@@ -56,6 +57,17 @@ export default function App() {
               path="/transactions"
               element={
                 <Transactions
+                  metadata={metadata}
+                  balances={balances}
+                  onSaved={refresh}
+                  listVersion={listVersion}
+                />
+              }
+            />
+            <Route
+              path="/giftcards"
+              element={
+                <Giftcards
                   metadata={metadata}
                   balances={balances}
                   onSaved={refresh}

@@ -8,7 +8,7 @@ from django.db.models import Case, DecimalField, F, QuerySet, Sum, Value, When
 from django.db.models.functions import Abs, TruncMonth
 
 from finance.comment_parse import parse_store_comment
-from finance.models import Category, Receipt, Source, Transaction
+from finance.models import Category, Giftcard, Receipt, Source, Transaction
 
 TRANSACTION_HEADERS = [
     'Date',
@@ -17,6 +17,7 @@ TRANSACTION_HEADERS = [
     'Comment',
     'Sub category',
     'Receipt ID',
+    'Giftcard ID',
 ]
 
 DEFAULT_PAGE_SIZE = 10
@@ -40,6 +41,7 @@ def _tx_row(tx: Transaction) -> dict:
         'Comment': tx.comment,
         'Sub category': tx.category.sub_category if tx.category_id else '',
         'Receipt ID': str(tx.receipt_id) if tx.receipt_id else None,
+        'Giftcard ID': str(tx.giftcard_id) if tx.giftcard_id else None,
         'Creation Date': tx.creation_date.isoformat() if tx.creation_date else None,
         '__row': tx.row_number,
     }
@@ -242,3 +244,16 @@ def get_receipt(receipt_id: str) -> dict:
         'sources': sources,
         'items': items,
     }
+
+
+def get_giftcards() -> list[dict]:
+    """Return all giftcards ordered by date descending."""
+    return [
+        {
+            'id': str(g.id),
+            'shop': g.shop,
+            'date': g.date.isoformat(),
+            'balance': _dec_to_number(g.balance),
+        }
+        for g in Giftcard.objects.order_by('-date', '-creation_date')
+    ]

@@ -63,6 +63,21 @@ class Source(AuditedModel):
         db_table = 'source'
 
 
+class Giftcard(AuditedModel):
+    """Mirrors Sheets Giftcard; id equals sheet Giftcard ID."""
+
+    row_number = models.PositiveIntegerField(
+        unique=True,
+        help_text='1-based Google Sheets row number in the Giftcard table.',
+    )
+    shop = models.CharField(max_length=256)
+    date = models.DateField()
+    balance = models.DecimalField(max_digits=14, decimal_places=2)
+
+    class Meta:
+        db_table = 'giftcard'
+
+
 class Transaction(AuditedModel):
     """Mirrors Sheets Transactions row."""
 
@@ -94,6 +109,14 @@ class Transaction(AuditedModel):
         blank=True,
         related_name='transactions',
         db_column='receipt_id',
+    )
+    giftcard = models.ForeignKey(
+        Giftcard,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='transactions',
+        db_column='giftcard_id',
     )
 
     class Meta:
