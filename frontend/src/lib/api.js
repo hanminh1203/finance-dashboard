@@ -67,13 +67,8 @@ export function getMetadata() {
   return api('/metadata');
 }
 
-export function getIncomeExpenseByMonth() {
-  return api('/income-expense');
-}
-
-export function getSpendingByCategory(month = 'all', { signal } = {}) {
-  const params = new URLSearchParams({ month });
-  return api(`/spending-by-category?${params}`, { signal });
+export function getDashboardData() {
+  return api('/dashboard');
 }
 
 export function addTransaction(payload) {

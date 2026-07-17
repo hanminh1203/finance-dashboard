@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getTransactionData, getMetadata, getIncomeExpenseByMonth } from '../lib/api';
+import { getDashboardData, getMetadata, getTransactionData } from '../lib/api';
 import { normalizeRows } from '../lib/transform';
+
+const EMPTY_DASHBOARD = {
+  summary: { netWorth: 0, income: 0, expense: 0, saving: 0 },
+  months: [],
+  incomeBreakdown: [],
+  expenseBreakdown: [],
+  transactions: [],
+};
 
 export function useFinanceData(signedIn) {
   const [transactions, setTransactions] = useState([]);
   const [metadata, setMetadata] = useState({ sources: [], categories: [] });
-  const [monthlySummary, setMonthlySummary] = useState([]);
+  const [dashboard, setDashboard] = useState(EMPTY_DASHBOARD);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [listVersion, setListVersion] = useState(0);
@@ -17,15 +25,15 @@ export function useFinanceData(signedIn) {
     setLoading(true);
     setError(null);
     try {
-      const [dataRes, metaRes, monthRes] = await Promise.all([
+      const [dataRes, metaRes, dashboardRes] = await Promise.all([
         getTransactionData(),
         getMetadata(),
-        getIncomeExpenseByMonth(),
+        getDashboardData(),
       ]);
       if (id !== refreshIdRef.current) return;
       setTransactions(normalizeRows(dataRes.rows, metaRes.categories));
       setMetadata(metaRes);
-      setMonthlySummary(monthRes);
+      setDashboard(dashboardRes);
       setListVersion((v) => v + 1);
     } catch (err) {
       if (id !== refreshIdRef.current) return;
@@ -39,5 +47,5 @@ export function useFinanceData(signedIn) {
     refresh();
   }, [refresh]);
 
-  return { transactions, metadata, monthlySummary, loading, error, refresh, listVersion };
+  return { transactions, metadata, dashboard, loading, error, refresh, listVersion };
 }

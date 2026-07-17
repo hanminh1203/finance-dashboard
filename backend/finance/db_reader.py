@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
-from django.db.models import Case, DecimalField, F, QuerySet, Sum, Value, When
-from django.db.models.functions import Abs, TruncMonth
+from django.db.models import Case, DecimalField, QuerySet, Sum, Value, When
+from django.db.models.functions import TruncMonth
+from django.utils import timezone
 
 from finance.comment_parse import parse_store_comment
 from finance.models import Category, Giftcard, Receipt, Source, Transaction
@@ -47,6 +49,27 @@ def _tx_row(tx: Transaction) -> dict:
     }
 
 
+def _dashboard_tx_row(tx: Transaction) -> dict:
+    """Return a transaction already shaped for the dashboard UI."""
+    return {
+        'row': tx.row_number,
+        'date': tx.date.isoformat(),
+        'creationDate': tx.creation_date.isoformat() if tx.creation_date else None,
+        'change': _dec_to_number(tx.change),
+        'source': tx.source.name,
+        'comment': tx.comment,
+        'subCategory': tx.category.sub_category if tx.category_id else '',
+        'mainCategory': tx.category.main_category if tx.category_id else '',
+        'type': tx.category.type if tx.category_id else '',
+        'receiptId': str(tx.receipt_id) if tx.receipt_id else None,
+    }
+
+
+def _shift_month(value: date, offset: int) -> date:
+    month_index = value.year * 12 + value.month - 1 + offset
+    return date(month_index // 12, month_index % 12 + 1, 1)
+
+
 def _base_queryset(*, source: str | None = None) -> QuerySet[Transaction]:
     qs = Transaction.objects.select_related('source', 'category', 'receipt').order_by(
         '-date', '-creation_date'
@@ -81,7 +104,7 @@ def get_transaction_data(
 ) -> dict:
     """Return sheet-shaped transaction rows from Postgres (no Main Category/Type).
 
-    Without page: all matching rows (Dashboard / aggregates).
+    Without page: all matching rows for pages that need a complete history.
     With page: LIMIT/OFFSET using backend DEFAULT_PAGE_SIZE, plus total count.
     """
     qs = _base_queryset(source=source)
@@ -109,88 +132,90 @@ def get_transaction_data(
     }
 
 
-def get_income_expense_by_month() -> list[dict]:
-    """Aggregate Income/Expense transactions by calendar month from Postgres.
+def get_dashboard_data() -> dict:
+    """Return all dashboard metrics, breakdowns, and current-month rows."""
+    current_month = timezone.localdate().replace(day=1)
+    first_month = _shift_month(current_month, -2)
+    next_month = _shift_month(current_month, 1)
+    month_dates = [_shift_month(first_month, offset) for offset in range(3)]
+    months = [f'{value.year}/{value.month:02d}' for value in month_dates]
 
-    Returns [{ month: 'YYYY/MM', income, expense }, ...] sorted ascending.
-    Expense sums are signed (typically negative). Transfers / uncategorized
-    rows are excluded.
-    """
     zero = Value(0, output_field=DecimalField(max_digits=14, decimal_places=2))
-    rows = (
-        Transaction.objects.filter(category__type__in=('Income', 'Expense'))
+    current_qs = Transaction.objects.filter(
+        date__gte=current_month,
+        date__lt=next_month,
+    )
+    totals = current_qs.aggregate(
+        income=Sum(
+            Case(
+                When(category__type='Income', then='change'),
+                default=zero,
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )
+        ),
+        expense=Sum(
+            Case(
+                When(category__type='Expense', then='change'),
+                default=zero,
+                output_field=DecimalField(max_digits=14, decimal_places=2),
+            )
+        ),
+    )
+    income = totals['income'] or Decimal('0')
+    expense = totals['expense'] or Decimal('0')
+    net_worth = Transaction.objects.aggregate(total=Sum('change'))['total'] or Decimal('0')
+
+    breakdown_rows = (
+        Transaction.objects.filter(
+            date__gte=first_month,
+            date__lt=next_month,
+            category__type__in=('Income', 'Expense'),
+        )
         .annotate(month=TruncMonth('date'))
-        .values('month')
-        .annotate(
-            income=Sum(
-                Case(
-                    When(category__type='Income', then='change'),
-                    default=zero,
-                    output_field=DecimalField(max_digits=14, decimal_places=2),
-                )
-            ),
-            expense=Sum(
-                Case(
-                    When(category__type='Expense', then='change'),
-                    default=zero,
-                    output_field=DecimalField(max_digits=14, decimal_places=2),
-                )
-            ),
-        )
-        .order_by('month')
+        .values('category__type', 'category__sub_category', 'month')
+        .annotate(amount=Sum('change'))
+        .order_by('category__type', 'category__sub_category', 'month')
     )
-    result = []
-    for row in rows:
+
+    breakdown = {'Income': {}, 'Expense': {}}
+    for row in breakdown_rows:
+        category_type = row['category__type']
+        sub_category = row['category__sub_category']
         month_date = row['month']
-        if month_date is None:
+        if category_type not in breakdown or not sub_category or month_date is None:
             continue
-        result.append(
-            {
-                'month': f'{month_date.year}/{month_date.month:02d}',
-                'income': _dec_to_number(row['income'] or Decimal('0')),
-                'expense': _dec_to_number(row['expense'] or Decimal('0')),
-            }
+        values = breakdown[category_type].setdefault(
+            sub_category,
+            {month: 0.0 for month in months},
         )
-    return result
+        month_key = f'{month_date.year}/{month_date.month:02d}'
+        values[month_key] = _dec_to_number(row['amount'] or Decimal('0'))
 
+    def pivot_rows(category_type: str) -> list[dict]:
+        return [
+            {'subCategory': name, 'amounts': values}
+            for name, values in sorted(breakdown[category_type].items())
+        ]
 
-def get_spending_by_category(month: str = 'all') -> list[dict]:
-    """Aggregate expense totals by main category for month='all' or 'YYYY/MM'.
-
-    Returns [{ category, amount }, ...] sorted by amount descending.
-    Amounts are absolute (positive). Uncategorized / non-Expense rows excluded.
-    """
-    month = (month or 'all').strip() or 'all'
-    qs = Transaction.objects.filter(category__type='Expense')
-
-    if month != 'all':
-        parts = month.split('/')
-        if len(parts) != 2:
-            raise ReaderError('month must be "all" or YYYY/MM', status=400)
-        try:
-            year = int(parts[0])
-            month_num = int(parts[1])
-        except ValueError as exc:
-            raise ReaderError('month must be "all" or YYYY/MM', status=400) from exc
-        if year < 1 or month_num < 1 or month_num > 12:
-            raise ReaderError('month must be "all" or YYYY/MM', status=400)
-        qs = qs.filter(date__year=year, date__month=month_num)
-
-    rows = (
-        qs.values('category__main_category')
-        .annotate(amount=Sum(Abs(F('change'))))
-        .order_by('-amount')
-    )
-    result = []
-    for row in rows:
-        name = (row['category__main_category'] or '').strip() or 'Other'
-        result.append(
-            {
-                'category': name,
-                'amount': _dec_to_number(row['amount'] or Decimal('0')),
-            }
+    transactions = [
+        _dashboard_tx_row(tx)
+        for tx in current_qs.select_related('source', 'category', 'receipt').order_by(
+            '-date', '-creation_date'
         )
-    return result
+    ]
+
+    return {
+        'summary': {
+            'netWorth': _dec_to_number(net_worth),
+            'income': _dec_to_number(income),
+            'expense': _dec_to_number(expense),
+            'saving': _dec_to_number(income + expense),
+        },
+        'months': months,
+        'incomeBreakdown': pivot_rows('Income'),
+        'expenseBreakdown': pivot_rows('Expense'),
+        'transactions': transactions,
+    }
 
 
 def get_receipt(receipt_id: str) -> dict:

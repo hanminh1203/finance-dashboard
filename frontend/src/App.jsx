@@ -15,7 +15,7 @@ import ChatBot from './components/ChatBot';
 
 export default function App() {
   const { signedIn, ready, error: authError, signIn, signOut } = useAuth();
-  const { transactions, metadata, monthlySummary, loading, error, refresh, listVersion } = useFinanceData(signedIn);
+  const { transactions, metadata, dashboard, loading, error, refresh, listVersion } = useFinanceData(signedIn);
   const { pathname } = useLocation();
   const balances = useMemo(() => currentBalances(transactions), [transactions]);
   const skipLoading = pathname === '/health' || pathname === '/management';
@@ -45,7 +45,7 @@ export default function App() {
           <Routes>
             <Route
               path="/"
-              element={<Dashboard transactions={transactions} monthlySummary={monthlySummary} listVersion={listVersion} />}
+              element={<Dashboard data={dashboard} />}
             />
             <Route
               path="/sources"
