@@ -14,11 +14,11 @@ Django API  ──  Google OAuth (auth code + refresh)
 Named Sheets Tables + Postgres (Transactions / Receipt / Receipt_Items / Category / Sources)
 ```
 
-The frontend never talks to Sheets or Groq directly. Secrets (`GOOGLE_CLIENT_SECRET`, `GROQ_API_KEY`, sheet ID) stay on the server. **Postgres is the read source of truth** for `Transactions`, `Receipt`, and `Receipt_Items`. Creates still append to Sheets first, then dual-write into Postgres. `Category` and `Sources` are also mirrored via **Management → Sync** (metadata API and the income-vs-expense chart still read from Sheets).
+The frontend never talks to Sheets or Groq directly. Secrets (`GOOGLE_CLIENT_SECRET`, `GROQ_API_KEY`, sheet ID) stay on the server. **Postgres is the read source of truth** for `Transactions`, `Receipt`, and `Receipt_Items`. Creates still append to Sheets first, then dual-write into Postgres. `Category` and `Sources` are also mirrored via **Management → Sync**.
 
 ## Features
 
-- **Dashboard** — net worth trend, income vs expense by month, category breakdown, recent transactions
+- **Dashboard** — net worth and current-month totals, three-month subcategory breakdowns, current-month transactions
 - **Sources** — balances and per-source history
 - **Add Transaction** / **Transfer** / **Receipt** — append rows to Sheets tables
 - **Assistant** — natural-language logging via Groq
@@ -82,7 +82,6 @@ The app expects Google Sheets **Insert → Table** names (configurable via env):
 |-------|------|
 | `Transactions` | Appends on create (dual-written to Postgres; list reads from Postgres) |
 | `Computed_Transactions` | Legacy computed view (no longer used by the API) |
-| `Income vs Expense by Month` | Monthly chart |
 | `Category` / `Sources` | Dropdown metadata (mirrored to Postgres via Management Sync) |
 | `Receipt` / `Receipt_Items` | Appends on create (dual-written to Postgres; detail reads from Postgres) |
 

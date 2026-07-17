@@ -26,11 +26,6 @@ export function parseDate(val) {
   return null;
 }
 
-export function monthKey(date) {
-  if (!date) return 'Unknown';
-  return `${date.getFullYear()}/${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
 export function formatAUD(n) {
   const sign = n < 0 ? '-' : '';
   return `${sign}$${Math.abs(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -82,40 +77,4 @@ export function currentBalances(transactions) {
     balances[t.source] = (balances[t.source] || 0) + t.change;
   }
   return balances;
-}
-
-/** Monthly income / expense / net, sorted chronologically. */
-export function monthlySummary(transactions) {
-  const map = new Map();
-  for (const t of transactions) {
-    const key = monthKey(t.date);
-    if (!map.has(key)) map.set(key, { month: key, income: 0, expense: 0, net: 0 });
-    const bucket = map.get(key);
-    if (t.type === 'Income') bucket.income += t.change;
-    else if (t.type === 'Expense') bucket.expense += t.change; // negative
-    bucket.net += t.change;
-  }
-  return Array.from(map.values()).sort((a, b) => a.month.localeCompare(b.month));
-}
-
-/** Net worth trend: cumulative balance across ALL sources over time, one point per transaction date. */
-export function netWorthTrend(transactions) {
-  const points = [];
-  let running = 0;
-  for (const t of transactions) {
-    running += t.change;
-    points.push({ date: t.date, total: running });
-  }
-  // Collapse to one point per day (last value of the day)
-  const byDay = new Map();
-  for (const p of points) {
-    const key = p.date.toISOString().slice(0, 10);
-    byDay.set(key, p.total);
-  }
-  return Array.from(byDay.entries()).map(([date, total]) => ({ date, total }));
-}
-
-/** Newest date first; newest creation_date first when dates match. */
-export function compareTransactionsDesc(a, b) {
-  return (b.date - a.date) || ((b.creationDate || 0) - (a.creationDate || 0));
 }
