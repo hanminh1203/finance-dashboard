@@ -1,7 +1,8 @@
 import { NavLink } from 'react-router-dom';
+import ThemeToggle from './ThemeToggle';
 
 const TABS = [
-  { to: '/', label: 'Dashboard', end: true },
+  { to: '/', label: 'Overview', end: true },
   { to: '/sources', label: 'Sources' },
   { to: '/transactions', label: 'Transactions' },
   { to: '/giftcards', label: 'Giftcards' },
@@ -11,27 +12,44 @@ const TABS = [
 ];
 
 function tabClassName({ isActive }, extra = '') {
-  return `px-3 rounded-lg text-sm font-medium transition-colors ${extra} ${
+  return `px-3 rounded-lg text-sm font-medium transition-colors duration-200 ${extra} ${
     isActive
-      ? 'bg-bg-raised text-text-primary'
-      : 'text-text-secondary hover:text-text-primary hover:bg-bg-raised/60'
+      ? 'bg-accent-muted text-accent'
+      : 'text-text-secondary hover:text-text-primary hover:bg-bg-raised/80'
   }`;
+}
+
+function BrandMark() {
+  return (
+    <div
+      className="w-8 h-8 rounded-lg bg-accent text-white flex items-center justify-center shadow-soft"
+      aria-hidden
+    >
+      <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h10M4 17h14" />
+      </svg>
+    </div>
+  );
 }
 
 export default function NavBar({ onRefresh, refreshing, onSignOut }) {
   return (
-    <header className="sticky top-0 z-30 border-b border-bg-border bg-bg/90 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-bg-border/80 bg-bg-surface/85 backdrop-blur-md">
       <div className="max-w-6xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between h-16">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center font-semibold text-white">
-              $
+        <div className="flex items-center justify-between h-14 sm:h-16">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <BrandMark />
+            <div className="min-w-0">
+              <div className="font-semibold text-text-primary tracking-tight truncate leading-tight">
+                Money Tracking
+              </div>
+              <div className="text-[11px] text-text-muted hidden sm:block leading-tight">
+                Personal ledger · AUD
+              </div>
             </div>
-            <span className="font-semibold text-text-primary tracking-tight">Money Tracking</span>
-            <span className="text-text-muted text-sm hidden sm:inline">AUD</span>
           </div>
 
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden lg:flex items-center gap-0.5" aria-label="Primary">
             {TABS.map((t) => (
               <NavLink
                 key={t.to}
@@ -45,11 +63,13 @@ export default function NavBar({ onRefresh, refreshing, onSignOut }) {
           </nav>
 
           <div className="flex items-center gap-1">
+            <ThemeToggle />
             <button
+              type="button"
               onClick={onRefresh}
               disabled={refreshing}
               aria-label="Refresh data"
-              className="p-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-raised transition-colors cursor-pointer disabled:opacity-50"
+              className="p-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-raised transition-colors duration-200 cursor-pointer disabled:opacity-50"
             >
               <svg
                 className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`}
@@ -58,23 +78,31 @@ export default function NavBar({ onRefresh, refreshing, onSignOut }) {
                 stroke="currentColor"
                 strokeWidth={2}
               >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12a7.5 7.5 0 0113.5-4.5M19.5 12a7.5 7.5 0 01-13.5 4.5M4.5 4.5v4.5h4.5M19.5 19.5V15h-4.5" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4.5 12a7.5 7.5 0 0113.5-4.5M19.5 12a7.5 7.5 0 01-13.5 4.5M4.5 4.5v4.5h4.5M19.5 19.5V15h-4.5"
+                />
               </svg>
             </button>
             <button
+              type="button"
               onClick={onSignOut}
               aria-label="Sign out"
-              className="p-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-raised transition-colors cursor-pointer"
+              className="p-2 rounded-lg text-text-secondary hover:text-text-primary hover:bg-bg-raised transition-colors duration-200 cursor-pointer"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"
+                />
               </svg>
             </button>
           </div>
         </div>
 
-        {/* Mobile tabs */}
-        <nav className="flex md:hidden gap-1 pb-3 overflow-x-auto scrollbar-thin">
+        <nav className="flex lg:hidden gap-1 pb-3 overflow-x-auto scrollbar-thin" aria-label="Primary mobile">
           {TABS.map((t) => (
             <NavLink
               key={t.to}

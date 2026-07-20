@@ -6,30 +6,46 @@ export default {
     extend: {
       fontFamily: {
         sans: ['"IBM Plex Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"IBM Plex Mono"', 'ui-monospace', 'monospace'],
       },
       colors: {
         bg: {
-          DEFAULT: '#0B0B0D',
-          surface: '#151517',
-          raised: '#1C1C1F',
-          border: '#2A2A2E',
+          DEFAULT: 'rgb(var(--color-bg) / <alpha-value>)',
+          surface: 'rgb(var(--color-bg-surface) / <alpha-value>)',
+          raised: 'rgb(var(--color-bg-raised) / <alpha-value>)',
+          border: 'rgb(var(--color-bg-border) / <alpha-value>)',
         },
         accent: {
-          DEFAULT: '#2563EB',
-          hover: '#3B75F0',
-          muted: '#1E3A6E',
+          DEFAULT: 'rgb(var(--color-accent) / <alpha-value>)',
+          hover: 'rgb(var(--color-accent-hover) / <alpha-value>)',
+          muted: 'rgb(var(--color-accent-muted) / <alpha-value>)',
         },
-        income: '#22C55E',
-        expense: '#F43F5E',
-        neutral: '#A1A1AA',
+        income: 'rgb(var(--color-income) / <alpha-value>)',
+        expense: 'rgb(var(--color-expense) / <alpha-value>)',
+        neutral: 'rgb(var(--color-text-muted) / <alpha-value>)',
         text: {
-          primary: '#F4F4F5',
-          secondary: '#A1A1AA',
-          muted: '#71717A',
+          primary: 'rgb(var(--color-text-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--color-text-secondary) / <alpha-value>)',
+          muted: 'rgb(var(--color-text-muted) / <alpha-value>)',
         },
       },
       boxShadow: {
-        card: '0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5)',
+        card: 'var(--shadow-card)',
+        soft: 'var(--shadow-soft)',
+      },
+      keyframes: {
+        'fade-up': {
+          '0%': { opacity: '0', transform: 'translateY(10px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        'fade-in': {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+      },
+      animation: {
+        'fade-up': 'fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'fade-in': 'fade-in 0.35s ease-out both',
       },
     },
   },

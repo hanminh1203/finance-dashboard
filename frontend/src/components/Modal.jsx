@@ -15,26 +15,26 @@ export default function Modal({ title, onClose, children, maxWidth = 'max-w-lg' 
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in">
       <button
         type="button"
         aria-label="Close dialog"
-        className="absolute inset-0 bg-black/60 cursor-pointer"
+        className="absolute inset-0 bg-slate-900/50 cursor-pointer backdrop-blur-[2px]"
         onClick={onClose}
       />
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`relative w-full ${maxWidth} max-h-[90vh] flex flex-col rounded-xl border border-bg-border bg-bg-surface shadow-card`}
+        className={`relative w-full ${maxWidth} max-h-[90vh] flex flex-col rounded-xl border border-bg-border bg-bg-surface shadow-soft animate-fade-up`}
       >
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-bg-border shrink-0">
-          <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wide">{title}</h2>
+          <h2 className="text-sm font-semibold text-text-primary tracking-tight">{title}</h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-raised cursor-pointer transition-colors"
+            className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-bg-raised cursor-pointer transition-colors duration-200"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

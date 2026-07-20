@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import Card from '../components/Card';
+import PageHeader from '../components/PageHeader';
 import { fetchManagementStatus, syncManagement } from '../lib/api';
 
 const TABLES = [
@@ -63,42 +64,30 @@ export default function Management() {
   const overallStatus = loading ? 'checking' : data?.matched ? 'ok' : 'mismatch';
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-text-primary">Management</h1>
-          <p className="text-sm text-text-muted mt-1">
-            Compare Google Sheet mirror tables with Postgres, and sync when they drift.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={loadStatus}
-            disabled={busy}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg border border-bg-border bg-bg-surface text-text-primary text-sm font-medium hover:bg-bg-border/40 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {loading ? 'Checking…' : 'Refresh status'}
-          </button>
-          <button
-            type="button"
-            onClick={handleSync}
-            disabled={busy}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {syncing ? 'Syncing…' : 'Sync'}
-          </button>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Management"
+        description="Compare Google Sheet mirror tables with Postgres, and sync when they drift."
+        action={
+          <>
+            <button type="button" onClick={loadStatus} disabled={busy} className="btn-secondary">
+              {loading ? 'Checking…' : 'Refresh status'}
+            </button>
+            <button type="button" onClick={handleSync} disabled={busy} className="btn-primary">
+              {syncing ? 'Syncing…' : 'Sync'}
+            </button>
+          </>
+        }
+      />
 
       {error && (
-        <div className="p-4 rounded-lg border border-expense/40 bg-expense/10 text-expense text-sm">
+        <div className="p-4 rounded-xl border border-expense/30 bg-expense/5 text-expense text-sm">
           {error}
         </div>
       )}
 
       {syncMessage && (
-        <div className="p-4 rounded-lg border border-income/40 bg-income/10 text-income text-sm">
+        <div className="p-4 rounded-xl border border-income/30 bg-income/5 text-income text-sm">
           {syncMessage}
         </div>
       )}
@@ -133,9 +122,9 @@ const STATUS_STYLES = {
     label: 'Mismatch',
   },
   checking: {
-    border: 'border-orange-500/40 bg-orange-500/10',
-    text: 'text-orange-400',
-    dot: 'bg-orange-500',
+    border: 'border-amber-500/40 bg-amber-500/10',
+    text: 'text-amber-700 dark:text-amber-400',
+    dot: 'bg-amber-500',
     label: 'Checking…',
   },
 };

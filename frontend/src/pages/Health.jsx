@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import Card from '../components/Card';
+import PageHeader from '../components/PageHeader';
 import { fetchHealth } from '../lib/api';
 
 const SERVICES = [
@@ -41,39 +42,32 @@ export default function Health() {
   const overallStatus = loading ? 'checking' : data?.status === 'ok' ? 'ok' : 'fail';
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold text-text-primary">System Health</h1>
-          <p className="text-sm text-text-muted mt-1">
-            Connection status for Google Sheet and PostgreSQL database.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={runCheck}
-          disabled={loading}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-accent text-white text-sm font-medium hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <svg
-            className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M4.5 12a7.5 7.5 0 0113.5-4.5M19.5 12a7.5 7.5 0 01-13.5 4.5M4.5 4.5v4.5h4.5M19.5 19.5V15h-4.5"
-            />
-          </svg>
-          {loading ? 'Checking…' : 'Refresh'}
-        </button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="System Health"
+        description="Connection status for Google Sheet and PostgreSQL database."
+        action={
+          <button type="button" onClick={runCheck} disabled={loading} className="btn-primary">
+            <svg
+              className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M4.5 12a7.5 7.5 0 0113.5-4.5M19.5 12a7.5 7.5 0 01-13.5 4.5M4.5 4.5v4.5h4.5M19.5 19.5V15h-4.5"
+              />
+            </svg>
+            {loading ? 'Checking…' : 'Refresh'}
+          </button>
+        }
+      />
 
       {error && (
-        <div className="p-4 rounded-lg border border-expense/40 bg-expense/10 text-expense text-sm">
+        <div className="p-4 rounded-xl border border-expense/30 bg-expense/5 text-expense text-sm">
           {error}
         </div>
       )}
@@ -109,9 +103,9 @@ const STATUS_STYLES = {
     label: 'One or more checks failed',
   },
   checking: {
-    border: 'border-orange-500/40 bg-orange-500/10',
-    text: 'text-orange-400',
-    dot: 'bg-orange-500',
+    border: 'border-amber-500/40 bg-amber-500/10',
+    text: 'text-amber-700 dark:text-amber-400',
+    dot: 'bg-amber-500',
     label: 'Checking connections…',
   },
 };

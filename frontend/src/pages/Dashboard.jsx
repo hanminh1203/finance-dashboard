@@ -1,5 +1,6 @@
 import Card from '../components/Card';
 import StatCard from '../components/StatCard';
+import PageHeader from '../components/PageHeader';
 import CategoryBreakdownTable from '../components/CategoryBreakdownTable';
 import TransactionList from '../components/TransactionList';
 
@@ -8,8 +9,13 @@ export default function Dashboard({ data }) {
   const currentMonth = months[months.length - 1];
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+    <div className="space-y-5 stagger-children">
+      <PageHeader
+        title="Overview"
+        description="Current month totals, three-month category breakdowns, and this month's activity."
+      />
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
         <StatCard
           label="Net Worth"
           value={summary.netWorth}
@@ -36,7 +42,7 @@ export default function Dashboard({ data }) {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card title="Income Breakdown by Subcategory">
           <CategoryBreakdownTable
             months={months}
