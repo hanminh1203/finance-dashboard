@@ -33,7 +33,7 @@ function AmountCell({ value, previous, className = '' }) {
   const text = amountText(value);
   const change = monthChange(value, previous);
   return (
-    <td className={`px-3 text-right tabular-nums whitespace-nowrap text-text-primary ${className}`}>
+    <td className={`px-3 text-right tabular-money whitespace-nowrap text-text-primary ${className}`}>
       <span className="inline-flex items-center justify-end">
         <span className={text === '-' ? 'text-text-muted' : undefined}>{text}</span>
         <ChangeArrow direction={change} />
@@ -59,9 +59,14 @@ export default function CategoryBreakdownTable({ months, rows, emptyLabel }) {
       <table className="w-full min-w-[480px] text-sm">
         <thead>
           <tr className="border-b border-bg-border text-text-muted">
-            <th className="py-2 pr-4 text-left font-medium">Subcategory</th>
+            <th className="py-2 pr-4 text-left text-xs font-semibold uppercase tracking-[0.05em]">
+              Subcategory
+            </th>
             {months.map((month) => (
-              <th key={month} className="px-3 py-2 text-right font-medium whitespace-nowrap">
+              <th
+                key={month}
+                className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-[0.05em] whitespace-nowrap"
+              >
                 {month}
               </th>
             ))}

@@ -1,15 +1,13 @@
 import { useEffect, useState } from 'react';
 import Card from '../components/Card';
 import Modal from '../components/Modal';
+import PageHeader from '../components/PageHeader';
 import TransactionList from '../components/TransactionList';
 import AddTransactionForm from '../components/AddTransactionForm';
 import TransferForm from '../components/TransferForm';
 import ReceiptForm from '../components/ReceiptForm';
 import { getTransactionData } from '../lib/api';
 import { normalizeRows } from '../lib/transform';
-
-const buttonClass =
-  'px-3 py-2 rounded-lg text-sm font-medium bg-bg-raised border border-bg-border text-text-primary hover:border-accent cursor-pointer transition-colors';
 
 export default function Transactions({ metadata, balances, onSaved, listVersion }) {
   const [modal, setModal] = useState(null);
@@ -50,18 +48,24 @@ export default function Transactions({ metadata, balances, onSaved, listVersion 
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setModal('add')} className={buttonClass}>
-          Add Transaction
-        </button>
-        <button type="button" onClick={() => setModal('transfer')} className={buttonClass}>
-          Transfers
-        </button>
-        <button type="button" onClick={() => setModal('receipt')} className={buttonClass}>
-          Add Receipt
-        </button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Transactions"
+        description="Record spending, income, transfers, and receipts."
+        action={
+          <>
+            <button type="button" onClick={() => setModal('add')} className="btn-primary">
+              Add Transaction
+            </button>
+            <button type="button" onClick={() => setModal('transfer')} className="btn-secondary">
+              Transfers
+            </button>
+            <button type="button" onClick={() => setModal('receipt')} className="btn-secondary">
+              Add Receipt
+            </button>
+          </>
+        }
+      />
 
       <Card title="All Transactions">
         {error && <div className="mb-3 text-sm text-expense">{error}</div>}

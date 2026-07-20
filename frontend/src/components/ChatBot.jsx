@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Card from './Card';
+import PageHeader from './PageHeader';
 import { inputClass } from './FormField';
 import { parseFinanceMessage, addTransaction, addTransfer } from '../lib/api';
 import { formatAUD, formatDateShort } from '../lib/transform';
@@ -39,7 +40,7 @@ export default function ChatBot({ metadata, onSaved }) {
           ...m,
           {
             role: 'assistant',
-            text: `✅ Added ${type.toLowerCase()} of ${formatAUD(Math.abs(amount))} — "${source}" / ${subCategory}${
+            text: `Added ${type.toLowerCase()} of ${formatAUD(Math.abs(amount))} — "${source}" / ${subCategory}${
               comment ? ` ("${comment}")` : ''
             } on ${formatDateShort(date)}.`,
           },
@@ -55,7 +56,7 @@ export default function ChatBot({ metadata, onSaved }) {
           ...m,
           {
             role: 'assistant',
-            text: `✅ Transferred ${formatAUD(amount)} from "${fromSource}" to "${toSource}" on ${formatDateShort(date)} (2 linked transactions recorded).`,
+            text: `Transferred ${formatAUD(amount)} from "${fromSource}" to "${toSource}" on ${formatDateShort(date)} (2 linked transactions recorded).`,
           },
         ]);
       } else {
@@ -69,55 +70,59 @@ export default function ChatBot({ metadata, onSaved }) {
         ]);
       }
     } catch (err) {
-      setMessages((m) => [...m, { role: 'assistant', error: true, text: `❌ ${err.message || String(err)}` }]);
+      setMessages((m) => [...m, { role: 'assistant', error: true, text: err.message || String(err) }]);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Card title="Finance Assistant" className="max-w-2xl mx-auto flex flex-col h-[70vh]">
-      <div className="flex-1 overflow-y-auto scrollbar-thin space-y-3 pr-1">
-        {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div
-              className={`max-w-[85%] px-3.5 py-2.5 rounded-xl text-sm whitespace-pre-wrap ${
-                m.role === 'user'
-                  ? 'bg-accent text-white'
-                  : m.error
-                  ? 'bg-expense/10 text-expense border border-expense/30'
-                  : 'bg-bg-raised text-text-primary'
-              }`}
-            >
-              {m.text}
+    <div className="space-y-5 max-w-2xl mx-auto">
+      <PageHeader
+        title="Assistant"
+        description="Describe a purchase or transfer in plain language and I will log it."
+      />
+      <Card title="Conversation" className="flex flex-col h-[70vh]">
+        <div className="flex-1 overflow-y-auto scrollbar-thin space-y-3 pr-1">
+          {messages.map((m, i) => (
+            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                className={`max-w-[85%] px-3.5 py-2.5 rounded-xl text-sm whitespace-pre-wrap ${
+                  m.role === 'user'
+                    ? 'bg-accent text-white'
+                    : m.error
+                      ? 'bg-expense/5 text-expense border border-expense/30'
+                      : 'bg-bg-raised text-text-primary'
+                }`}
+              >
+                {m.text}
+              </div>
             </div>
-          </div>
-        ))}
-        {busy && (
-          <div className="flex justify-start">
-            <div className="max-w-[85%] px-3.5 py-2.5 rounded-xl text-sm bg-bg-raised text-text-muted">Thinking…</div>
-          </div>
-        )}
-        <div ref={bottomRef} />
-      </div>
+          ))}
+          {busy && (
+            <div className="flex justify-start">
+              <div className="max-w-[85%] px-3.5 py-2.5 rounded-xl text-sm bg-bg-raised text-text-muted">
+                Thinking…
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
 
-      <form onSubmit={handleSend} className="mt-4 flex gap-2">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="e.g. Paid $32 for coffee with Cash yesterday"
-          className={inputClass + ' flex-1'}
-          disabled={busy}
-        />
-        <button
-          type="submit"
-          disabled={busy || !input.trim()}
-          className="px-4 py-2.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors cursor-pointer"
-        >
-          Send
-        </button>
-      </form>
-    </Card>
+        <form onSubmit={handleSend} className="mt-4 flex gap-2">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="e.g. Paid $32 for coffee with Cash yesterday"
+            className={`${inputClass} flex-1`}
+            disabled={busy}
+          />
+          <button type="submit" disabled={busy || !input.trim()} className="btn-primary shrink-0">
+            Send
+          </button>
+        </form>
+      </Card>
+    </div>
   );
 }

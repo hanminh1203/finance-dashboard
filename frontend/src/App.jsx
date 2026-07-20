@@ -25,12 +25,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className="min-h-screen">
       <NavBar onRefresh={refresh} refreshing={loading} onSignOut={signOut} />
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-5 sm:py-6">
         {error && (
-          <div className="mb-6 p-4 rounded-lg border border-expense/40 bg-expense/10 text-expense text-sm">
+          <div className="mb-5 p-4 rounded-xl border border-expense/30 bg-expense/5 text-expense text-sm">
             Failed to load data: {error}
             {error.toLowerCase().includes('permission') && (
               <> — make sure this Google account has at least Viewer access to the spreadsheet.</>
@@ -38,15 +38,11 @@ export default function App() {
           </div>
         )}
 
-        {/* Avoid mounting routes until first load so Dashboard is not remounted mid-fetch. */}
         {!skipLoading && listVersion === 0 && !error ? (
           <LoadingState />
         ) : (
           <Routes>
-            <Route
-              path="/"
-              element={<Dashboard data={dashboard} />}
-            />
+            <Route path="/" element={<Dashboard data={dashboard} />} />
             <Route
               path="/sources"
               element={
@@ -88,11 +84,22 @@ export default function App() {
 
 function LoadingState() {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      {[...Array(3)].map((_, i) => (
-        <div key={i} className="h-24 rounded-xl bg-bg-surface border border-bg-border animate-pulse" />
-      ))}
-      <div className="sm:col-span-3 h-80 rounded-xl bg-bg-surface border border-bg-border animate-pulse" />
+    <div className="space-y-5">
+      <div className="h-14 rounded-xl bg-bg-surface border border-bg-border animate-pulse" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+        {[...Array(4)].map((_, i) => (
+          <div
+            key={i}
+            className="h-24 rounded-xl bg-bg-surface border border-bg-border animate-pulse"
+            style={{ animationDelay: `${i * 60}ms` }}
+          />
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="h-72 rounded-xl bg-bg-surface border border-bg-border animate-pulse" />
+        <div className="h-72 rounded-xl bg-bg-surface border border-bg-border animate-pulse" />
+      </div>
+      <div className="h-64 rounded-xl bg-bg-surface border border-bg-border animate-pulse" />
     </div>
   );
 }

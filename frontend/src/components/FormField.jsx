@@ -2,7 +2,9 @@ export function Field({ label, children }) {
   return (
     <label className="block">
       {label != null && label !== '' && (
-        <span className="block text-sm font-medium text-text-secondary mb-1.5">{label}</span>
+        <span className="block text-xs font-medium uppercase tracking-[0.05em] text-text-muted mb-1.5">
+          {label}
+        </span>
       )}
       {children}
     </label>
@@ -10,6 +12,6 @@ export function Field({ label, children }) {
 }
 
 export const inputClass =
-  'w-full bg-bg-raised border border-bg-border rounded-lg px-3 py-2.5 text-text-primary placeholder:text-text-muted focus:border-accent transition-colors outline-none';
+  'w-full bg-bg-surface border border-bg-border rounded-lg px-3 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:border-accent focus:ring-2 focus:ring-accent/15 transition-colors duration-200 outline-none';
 
-export const selectClass = inputClass + ' cursor-pointer';
+export const selectClass = `${inputClass} cursor-pointer`;

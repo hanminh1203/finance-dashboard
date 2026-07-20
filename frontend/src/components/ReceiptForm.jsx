@@ -10,12 +10,9 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 const emptySource = () => ({ source: '', amount: '' });
 const emptyItem = () => ({ name: '', amount: '', unit: 'piece', money: '' });
 
-const cancelClass =
-  'px-3 py-2.5 rounded-lg border border-bg-border bg-bg-raised text-text-secondary hover:text-text-primary font-medium transition-colors cursor-pointer';
-const submitClass =
-  'px-3 py-2.5 rounded-lg border border-bg-border bg-bg-raised text-text-primary hover:border-accent disabled:opacity-40 disabled:cursor-not-allowed font-medium transition-colors cursor-pointer';
-const primaryClass =
-  'px-3 py-2.5 rounded-lg bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium transition-colors cursor-pointer';
+const cancelClass = 'btn-secondary';
+const submitClass = 'btn-secondary';
+const primaryClass = 'btn-primary';
 
 export default function ReceiptForm({ metadata, onSaved, onClose }) {
   const [store, setStore] = useState('');
