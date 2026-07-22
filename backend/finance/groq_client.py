@@ -131,30 +131,17 @@ def extract_receipt_from_image(image_data_url: str, metadata: dict) -> dict:
 Return ONLY valid JSON matching this schema:
 {{
   "store": "string",
-  "date": "YYYY-MM-DD",
-  "subCategory": "string",
-  "comment": "string",
-  "sources": [{{"source": "string", "amount": number}}],
-  "items": [{{"name": "string", "amount": number, "unit": "kg"|"g"|"ml"|"l"|"piece", "money": number}}]
+  "date": "YYYY-MM-DD"
+  "items": [{{"name": "string", "amount": 1, "money": number}}]
 }}
 
 Today's date is {today}. Use it only if the receipt date is unreadable.
-Available payment sources (use EXACTLY as written when you can infer one; otherwise use ""): {', '.join(source_names) or '(none)'}
-Available expense sub categories (use the Sub value EXACTLY as written): {'; '.join(category_list) or '(none)'}
 
 Rules:
-- Read every purchasable line item. Skip tax-only / change / total / payment lines as items.
-- items[].money is the line price paid (positive number). items[].amount is quantity/weight (default 1).
-- items[].unit must be one of: kg, g, ml, l, piece. Prefer piece when unclear.
-- Sum of items[].money should equal the receipt total (or as close as readable).
-- sources: if payment method maps to an available source, use it; otherwise one entry with source "" and amount = receipt total.
-- If split tender is visible, emit multiple sources whose amounts sum to the total.
-- subCategory: best match from the available expense list based on store/items; "" if none fit.
-- comment: short note (e.g. "groceries") or "".
+- Read every purchasable line item.
+- items[].money is the line price paid (positive number).
 - store: merchant name as printed.
-- Never invent sources or sub categories that are not in the lists (blank is ok).
-- All money/amount fields are positive numbers."""
-
+- All money fields are positive numbers."""
     parsed = _chat(
         [
             {'role': 'system', 'content': system_prompt},
